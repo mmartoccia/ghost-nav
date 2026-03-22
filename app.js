@@ -469,10 +469,59 @@ async function fetchRoutes() {
   }
 }
 
-function processRoutes(routes) {
+async function processRoutes(routes) {
   clearRouteLayers();
 
   console.log('[Routes] Processing', routes.length, 'routes');
+
+  // Compute bounding box across ALL routes to fetch cameras along entire corridor
+  let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+  routes.forEach(route => {
+    route.geometry.coordinates.forEach(([lon, lat]) => {
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+    });
+  });
+
+  // Add padding (0.01 deg ~ 1km)
+  minLat -= 0.01; maxLat += 0.01;
+  minLon -= 0.01; maxLon += 0.01;
+
+  // Fetch cameras along entire route corridor
+  console.log('[Routes] Fetching cameras for route bbox:', minLat, minLon, maxLat, maxLon);
+  const query = `[out:json][timeout:30];node["man_made"="surveillance"]["surveillance:type"="ALPR"](${minLat.toFixed(5)},${minLon.toFixed(5)},${maxLat.toFixed(5)},${maxLon.toFixed(5)});out body;`;
+  try {
+    const resp = await fetch(OVERPASS_URL, {
+      method: 'POST',
+      body: 'data=' + encodeURIComponent(query),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const routeCameras = (data.elements || []).map(el => ({
+        lat: el.lat, lon: el.lon, id: el.id,
+        manufacturer: el.tags?.manufacturer || 'Unknown',
+        operator: el.tags?.operator || 'Unknown',
+        direction: el.tags?.direction || el.tags?.['camera:direction'] || '?',
+        surveillance: el.tags?.surveillance || 'public',
+      }));
+      // Merge with existing cameras (dedup by id)
+      const existingIds = new Set(cameras.map(c => c.id));
+      routeCameras.forEach(c => {
+        if (!existingIds.has(c.id)) {
+          cameras.push(c);
+          existingIds.add(c.id);
+        }
+      });
+      console.log('[Routes] Loaded', routeCameras.length, 'cameras along route corridor. Total:', cameras.length);
+      // Re-render camera markers
+      processCameras(data.elements || []);
+    }
+  } catch (err) {
+    console.warn('[Routes] Failed to fetch route cameras:', err);
+  }
 
   const scored = routes.map((route, idx) => {
     const coords     = route.geometry.coordinates;
