@@ -11,9 +11,9 @@
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const SUMMERVILLE        = [33.0185, -80.1762];
-const OSRM_BASE          = 'https://router.project-osrm.org/route/v1/driving';
-const OVERPASS_URL       = 'https://overpass-api.de/api/interpreter';
-const NOMINATIM_BASE     = 'https://nominatim.openstreetmap.org/search';
+const OSRM_BASE          = '/proxy/osrm/route/v1/driving';
+const OVERPASS_URL       = '/proxy/overpass';
+const NOMINATIM_BASE = '/proxy/nominatim';
 // NOTE: No custom headers — browser fetch with User-Agent triggers CORS preflight that Nominatim rejects
 const CAMERA_PROXIMITY_M = 50; // meters
 const GEOCODE_DEBOUNCE   = 300; // ms
