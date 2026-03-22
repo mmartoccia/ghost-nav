@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ghost — Privacy-Aware Navigation</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header id="top-bar">
+      <div id="brand">
+        <span class="ghost-emoji">👻</span>
+        <span class="brand-name">Ghost</span>
+        <span class="brand-tagline">privacy-aware navigation</span>
+      </div>
+      <div id="header-actions">
+        <button id="clear-btn" class="btn btn-ghost">Clear</button>
+      </div>
+    </header>
+
+    <!-- Main content -->
+    <div id="main">
+      <!-- Map -->
+      <div id="map-container">
+        <div id="map"></div>
+        <div id="map-hint">
+          <span id="hint-text">Enter start and destination to compare routes</span>
+        </div>
+        <div id="camera-count-badge" class="hidden">
+          <span id="camera-count-num">0</span> ALPR cameras loaded
+        </div>
+      </div>
+
+      <!-- Side panel -->
+      <aside id="side-panel">
+
+        <!-- Search inputs -->
+        <div id="search-section">
+          <div class="search-field">
+            <label class="search-label">FROM</label>
+            <div class="search-input-wrapper">
+              <input
+                type="text"
+                id="start-input"
+                class="search-input"
+                placeholder="Start address or place…"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <div class="search-dropdown hidden" id="start-dropdown"></div>
+            </div>
+          </div>
+
+          <div class="swap-row">
+            <button id="swap-btn" class="btn-swap" title="Swap start and destination">↕</button>
+            <div class="swap-line"></div>
+          </div>
+
+          <div class="search-field">
+            <label class="search-label">TO</label>
+            <div class="search-input-wrapper">
+              <input
+                type="text"
+                id="end-input"
+                class="search-input"
+                placeholder="Destination address or place…"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <div class="search-dropdown hidden" id="end-dropdown"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Route analysis panels -->
+        <div id="panel-idle">
+          <div class="idle-icon">🗺️</div>
+          <p>Search for a start and destination to compare routes by camera exposure.</p>
+          <ul class="feature-list">
+            <li>🔴 ALPR cameras from OpenStreetMap</li>
+            <li>🛣️ Up to 3 alternative routes</li>
+            <li>📏 50m proximity detection</li>
+          </ul>
+        </div>
+
+        <div id="panel-loading" class="hidden">
+          <div class="spinner"></div>
+          <p>Calculating routes…</p>
+        </div>
+
+        <div id="panel-results" class="hidden">
+          <div id="route-cards"></div>
+          <div id="legend">
+            <div class="legend-item"><span class="legend-dot green"></span> Fewest cameras</div>
+            <div class="legend-item"><span class="legend-dot yellow"></span> Middle</div>
+            <div class="legend-item"><span class="legend-dot red"></span> Most cameras</div>
+          </div>
+        </div>
+
+        <div id="panel-error" class="hidden">
+          <div class="error-icon">⚠️</div>
+          <p id="error-message">Something went wrong.</p>
+        </div>
+
+        <div id="camera-detail-panel" class="hidden">
+          <h3>📷 Camera Details</h3>
+          <div id="camera-detail-content"></div>
+          <button id="close-camera-detail" class="btn btn-small">Close</button>
+        </div>
+
+      </aside>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
