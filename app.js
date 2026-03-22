@@ -1728,3 +1728,157 @@ function maybeCalculateRoutes() {
     setHint(startCoords ? 'Now enter your destination' : 'Enter your start location');
   }
 }
+
+// ─── City Surveillance Heatmap ────────────────────────────────────────────────
+
+let heatmapActive    = false;
+let heatLayer        = null;
+let heatCameras      = [];  // cameras fetched for heatmap
+let heatClickHandler = null;
+
+/**
+ * Toggle the heatmap on/off.
+ */
+async function toggleHeatmap() {
+  const btn = document.getElementById('heatmap-btn');
+  if (!heatmapActive) {
+    heatmapActive = true;
+    btn.classList.add('active');
+    btn.textContent = '🔥 Heatmap ON';
+    document.getElementById('heatmap-legend').style.display = 'block';
+    await refreshHeatmap();
+    map.on('moveend zoomend', debounce(refreshHeatmap, 800));
+    // Add click handler for surveillance score popup
+    heatClickHandler = onHeatmapClick;
+    map.on('click', heatClickHandler);
+  } else {
+    heatmapActive = false;
+    btn.classList.remove('active');
+    btn.textContent = '🔥 Heatmap';
+    document.getElementById('heatmap-legend').style.display = 'none';
+    document.getElementById('heatmap-spinner').style.display = 'none';
+    if (heatLayer) {
+      map.removeLayer(heatLayer);
+      heatLayer = null;
+    }
+    heatCameras = [];
+    if (heatClickHandler) {
+      map.off('click', heatClickHandler);
+      heatClickHandler = null;
+    }
+    map.off('moveend zoomend', debounce(refreshHeatmap, 800));
+  }
+}
+
+/**
+ * Fetch ALPR cameras for the current map bbox and render heatmap layer.
+ */
+async function refreshHeatmap() {
+  if (!heatmapActive) return;
+
+  const spinner = document.getElementById('heatmap-spinner');
+  spinner.style.display = 'block';
+
+  const bounds = map.getBounds();
+  const s = bounds.getSouth().toFixed(5);
+  const w = bounds.getWest().toFixed(5);
+  const n = bounds.getNorth().toFixed(5);
+  const e = bounds.getEast().toFixed(5);
+
+  const query = `[out:json]; node["surveillance:type"="ALPR"](${s},${w},${n},${e}); out;`;
+
+  try {
+    const resp = await fetch(OVERPASS_URL, {
+      method:  'POST',
+      body:    'data=' + encodeURIComponent(query),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+
+    if (!resp.ok) throw new Error(`Overpass HTTP ${resp.status}`);
+    const data = await resp.json();
+    heatCameras = (data.elements || []).map(el => ({
+      lat:  el.lat,
+      lon:  el.lon,
+      id:   el.id,
+      tags: el.tags || {},
+    }));
+
+    renderHeatLayer();
+  } catch (err) {
+    console.warn('[Heatmap] Overpass fetch failed:', err);
+  } finally {
+    spinner.style.display = 'none';
+  }
+}
+
+/**
+ * Build / rebuild the Leaflet.heat layer from heatCameras.
+ */
+function renderHeatLayer() {
+  if (heatLayer) {
+    map.removeLayer(heatLayer);
+    heatLayer = null;
+  }
+
+  if (heatCameras.length === 0) return;
+
+  // Each camera is one heat point with intensity 1.0
+  const points = heatCameras.map(cam => [cam.lat, cam.lon, 1.0]);
+
+  heatLayer = L.heatLayer(points, {
+    radius:  50,
+    blur:    35,
+    max:     0.8,
+    gradient: {
+      0.0:  '#00ff00',  // green — camera-free
+      0.4:  '#ffff00',  // yellow
+      0.7:  '#ff8800',  // orange
+      1.0:  '#ff0000',  // red — heavy surveillance
+    },
+  }).addTo(map);
+}
+
+/**
+ * Handle map click: count cameras within 500m and show surveillance score popup.
+ */
+function onHeatmapClick(e) {
+  const { lat, lng } = e.latlng;
+
+  // Count cameras within 500m of click point
+  const RADIUS_M = 500;
+  let count = 0;
+  for (const cam of heatCameras) {
+    const d = haversine(lat, lng, cam.lat, cam.lon);
+    if (d <= RADIUS_M) count++;
+  }
+
+  // Score: 0 cameras → 100/100, scales down linearly, floor at 0
+  // Use a scale where ~20 cameras = score 0
+  const score = Math.max(0, Math.round(100 - (count / 20) * 100));
+
+  const popup = L.popup()
+    .setLatLng(e.latlng)
+    .setContent(`
+      <div style="font-family:monospace;font-size:13px;min-width:200px">
+        <div style="font-weight:700;color:#00ff88;margin-bottom:6px">📍 Surveillance Score</div>
+        <div style="margin-bottom:4px">
+          <strong>${count}</strong> camera${count !== 1 ? 's' : ''} within 500m
+        </div>
+        <div>
+          Surveillance score: <strong style="color:${score >= 70 ? '#22c55e' : score >= 40 ? '#eab308' : '#ef4444'}">${score}/100</strong>
+        </div>
+        <div style="margin-top:6px;font-size:11px;color:#8b949e">
+          ${score >= 70 ? '🟢 Low surveillance zone' : score >= 40 ? '🟡 Moderate surveillance' : '🔴 Heavy surveillance zone'}
+        </div>
+      </div>
+    `)
+    .openOn(map);
+}
+
+// Wire up heatmap button in DOMContentLoaded (appended to existing boot logic)
+document.addEventListener('DOMContentLoaded', () => {
+  const heatBtn = document.getElementById('heatmap-btn');
+  if (heatBtn) {
+    heatBtn.addEventListener('click', toggleHeatmap);
+  }
+});

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ghost Nav — Privacy Route Checker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace, sans-serif;
+      font-size: 14px;
+      overflow: hidden;
+    }
+
+    #embed-root {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      min-height: 300px;
+      padding: 16px;
+      gap: 12px;
+    }
+
+    /* Header */
+    #embed-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #embed-header .ghost-emoji { font-size: 20px; }
+    #embed-header .brand {
+      font-weight: 700;
+      font-size: 15px;
+      color: #00ff88;
+      letter-spacing: -0.3px;
+    }
+    #embed-header .tagline {
+      font-size: 11px;
+      color: #8b949e;
+      margin-left: 4px;
+    }
+    #embed-header a.full-link {
+      margin-left: auto;
+      font-size: 11px;
+      color: #58a6ff;
+      text-decoration: none;
+      opacity: 0.7;
+      transition: opacity 0.15s;
+    }
+    #embed-header a.full-link:hover { opacity: 1; }
+
+    /* Inputs */
+    #embed-inputs {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .embed-field {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .embed-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .embed-input {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #e6edf3;
+      font-size: 13px;
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    .embed-input:focus { border-color: #58a6ff; }
+    .embed-input::placeholder { color: #484f58; }
+
+    #embed-btn {
+      align-self: flex-end;
+      background: #00ff88;
+      color: #0d1117;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 9px 18px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s, opacity 0.15s;
+      height: 36px;
+    }
+    #embed-btn:hover { background: #00e67a; }
+    #embed-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Result panel */
+    #embed-result {
+      flex: 1;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 14px 16px;
+      overflow: auto;
+      min-height: 0;
+    }
+
+    /* States */
+    .state-idle, .state-loading, .state-error {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 8px;
+      color: #8b949e;
+      text-align: center;
+    }
+    .state-idle .icon { font-size: 28px; }
+    .state-loading .spinner {
+      width: 24px; height: 24px;
+      border: 3px solid #30363d;
+      border-top-color: #00ff88;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .state-error .icon { font-size: 24px; color: #f85149; }
+    .state-error p { color: #f85149; font-size: 13px; }
+
+    /* Route results */
+    .route-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .route-card {
+      background: #0d1117;
+      border-radius: 6px;
+      padding: 10px 12px;
+      border: 1px solid #30363d;
+    }
+    .route-card.ghost-card { border-color: #238636; }
+    .route-card-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .fastest-card .route-card-label { color: #58a6ff; }
+    .ghost-card .route-card-label { color: #00ff88; }
+
+    .route-stat {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      padding: 2px 0;
+      color: #8b949e;
+    }
+    .route-stat strong {
+      color: #e6edf3;
+      font-weight: 600;
+    }
+
+    .savings-bar {
+      background: #0d1117;
+      border: 1px solid #238636;
+      border-radius: 6px;
+      padding: 10px 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      align-items: center;
+    }
+    .savings-bar .savings-item {
+      font-size: 13px;
+      color: #e6edf3;
+    }
+    .savings-bar .savings-item .label { color: #8b949e; font-size: 11px; }
+    .savings-bar .savings-item .value { font-weight: 700; }
+    .savings-bar .savings-item .value.green { color: #00ff88; }
+    .savings-bar .savings-item .value.yellow { color: #eab308; }
+    .savings-bar .savings-item .value.red { color: #f85149; }
+
+    .score-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 99px;
+      margin-top: 4px;
+    }
+    .score-high { background: rgba(0,255,136,0.15); color: #00ff88; }
+    .score-mid  { background: rgba(234,179,8,0.15);  color: #eab308; }
+    .score-low  { background: rgba(248,81,73,0.15);  color: #f85149; }
+
+    .no-ghost-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #8b949e;
+      text-align: center;
+      font-style: italic;
+    }
+
+    /* Responsive: single column on narrow */
+    @media (max-width: 460px) {
+      .route-grid { grid-template-columns: 1fr; }
+      #embed-inputs { flex-direction: column; }
+      #embed-btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+<div id="embed-root">
+  <!-- Header -->
+  <div id="embed-header">
+    <span class="ghost-emoji">👻</span>
+    <span class="brand">Ghost Nav</span>
+    <span class="tagline">privacy route checker</span>
+    <a class="full-link" href="/" target="_blank" rel="noopener">Open full map ↗</a>
+  </div>
+
+  <!-- Inputs row -->
+  <div id="embed-inputs">
+    <div class="embed-field">
+      <label class="embed-label" for="embed-origin">From</label>
+      <input type="text" id="embed-origin" class="embed-input" placeholder="Start address…" autocomplete="off" spellcheck="false" />
+    </div>
+    <div class="embed-field">
+      <label class="embed-label" for="embed-dest">To</label>
+      <input type="text" id="embed-dest" class="embed-input" placeholder="Destination…" autocomplete="off" spellcheck="false" />
+    </div>
+    <button id="embed-btn">Check Privacy</button>
+  </div>
+
+  <!-- Result panel -->
+  <div id="embed-result">
+    <div class="state-idle">
+      <span class="icon">🗺️</span>
+      <span>Enter origin &amp; destination above to compare routes by ALPR camera exposure.</span>
+    </div>
+  </div>
+</div>
+
+<script src="embed.js"></script>
+</body>
+</html>

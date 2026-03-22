@@ -805,6 +805,39 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(result, status)
             return
 
+        # ── Embed routes ──────────────────────────────────────────────────────
+        _embed_base = self.path.split('?')[0]
+        if _embed_base in ('/embed', '/embed/'):
+            embed_path = os.path.join(DIR, 'embed.html')
+            try:
+                with open(embed_path, 'rb') as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Length', str(len(data)))
+                self.send_header('X-Frame-Options', 'ALLOWALL')
+                self.end_headers()
+                self.wfile.write(data)
+            except FileNotFoundError:
+                self.send_response(404)
+                self.end_headers()
+            return
+
+        if self.path.split('?')[0] == '/embed.js':
+            js_path = os.path.join(DIR, 'embed.js')
+            try:
+                with open(js_path, 'rb') as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/javascript; charset=utf-8')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except FileNotFoundError:
+                self.send_response(404)
+                self.end_headers()
+            return
+
         # ── Existing proxy routes ─────────────────────────────────────────────
         if self.path.startswith('/proxy/nominatim?'):
             query = self.path.split('?', 1)[1]
