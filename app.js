@@ -18,14 +18,15 @@ const NOMINATIM_BASE      = '/proxy/nominatim';
 const CAMERA_PROXIMITY_M  = 50;    // meters — camera "on route" threshold
 const GEOCODE_DEBOUNCE    = 300;   // ms
 const CLUSTER_RADIUS_M    = 200;   // cameras within this distance share a cluster
-const GHOST_AVOIDANCE_M   = 320;   // perpendicular offset for avoidance waypoints (m)
+const GHOST_AVOIDANCE_M   = 800;   // perpendicular offset for avoidance waypoints (m)
 const MAX_GHOST_WAYPOINTS = 5;     // cap to avoid OSRM failures
 const GHOST_TIME_WARNING  = 2.0;   // warn if ghost route > this × fastest duration
+const AVOIDANCE_DISTANCES = [800, 1500, 2500]; // retry distances for ghost route
 
 const ROUTE_COLORS = {
-  fastest: { color: '#3b82f6', weight: 6, opacity: 0.9 },
-  ghost:   { color: '#22c55e', weight: 6, opacity: 0.9 },
-  alt:     { color: '#94a3b8', weight: 4, opacity: 0.55 },
+  fastest: { color: '#3b82f6', weight: 5, opacity: 0.55 },                             // blue, semi-transparent
+  ghost:   { color: '#22c55e', weight: 7, opacity: 0.9, dashArray: '12, 6' },          // green, dashed, on top
+  alt:     { color: '#94a3b8', weight: 4, opacity: 0.4 },
 };
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -496,7 +497,7 @@ async function processRoutes(routes) {
 
   let ghostResult = null;
   if (onFastestCameras.length > 0) {
-    ghostResult = await buildGhostRoute(fastest.geometry.coordinates, onFastestCameras);
+    ghostResult = await buildGhostRoute(fastest.geometry.coordinates, onFastestCameras, alts);
   } else {
     console.log('[Ghost] No cameras on fastest route, ghost route not needed');
   }
@@ -527,10 +528,10 @@ async function processRoutes(routes) {
     console.log('[Ghost] Ghost route cameras:', ghostCamHits, 'vs fastest:', fastestCamHits);
   }
 
-  // ── Draw routes (worst layering: draw alts first, then ghost, then fastest) ──
+  // ── Draw routes: alts first (bottom), then fastest (blue, semi-transparent), then ghost (green, solid, on top) ──
   scoredAlts.forEach(item => drawRouteItem(item));
-  if (ghostItem) drawRouteItem(ghostItem);
-  drawRouteItem(fastestItem);
+  drawRouteItem(fastestItem);          // blue underneath
+  if (ghostItem) drawRouteItem(ghostItem); // green dashed on top
 
   // ── Fit map ──
   if (routeLayers.length > 0) {
@@ -624,10 +625,13 @@ function closestRoutePoint(routeCoords, lat, lon) {
 }
 
 /**
- * Compute a waypoint GHOST_AVOIDANCE_M perpendicular to the route, on the
- * opposite side from the camera cluster.
+ * Compute a waypoint perpendicular to the route, on the opposite side from the camera.
+ * @param {object} cluster - camera cluster with lat/lon
+ * @param {Array}  routeCoords - [lon, lat] pairs
+ * @param {number} avoidDist - avoidance distance in meters (default GHOST_AVOIDANCE_M)
+ * @param {boolean} invertDir - if true, flip the chosen perpendicular direction
  */
-function computePerpendicularWaypoint(cluster, routeCoords) {
+function computePerpendicularWaypoint(cluster, routeCoords, avoidDist = GHOST_AVOIDANCE_M, invertDir = false) {
   const { segIdx, nearPt } = closestRoutePoint(routeCoords, cluster.lat, cluster.lon);
   if (!nearPt) return null;
 
@@ -658,26 +662,60 @@ function computePerpendicularWaypoint(cluster, routeCoords) {
   // Dot product with perpLeft — positive means camera is on the left side of road
   const dotLeft = camOffX * perpLeft.x + camOffY * perpLeft.y;
 
-  // Choose avoidance direction = OPPOSITE side from camera
-  const avoidDir = (dotLeft > 0) ? perpRight : perpLeft;
+  // Choose avoidance direction = OPPOSITE side from camera (or same side if inverted)
+  let avoidDir;
+  if (!invertDir) {
+    avoidDir = (dotLeft > 0) ? perpRight : perpLeft;
+  } else {
+    // Inverted: try the SAME side as the camera (in case opposite was wrong)
+    avoidDir = (dotLeft > 0) ? perpLeft : perpRight;
+  }
 
   // Project the waypoint from the nearest-on-route point
-  const waypointLon = nearPt[0] + (GHOST_AVOIDANCE_M * avoidDir.x) / lonScale;
-  const waypointLat = nearPt[1] + (GHOST_AVOIDANCE_M * avoidDir.y) / latScale;
+  const waypointLon = nearPt[0] + (avoidDist * avoidDir.x) / lonScale;
+  const waypointLat = nearPt[1] + (avoidDist * avoidDir.y) / latScale;
 
   return { lat: waypointLat, lon: waypointLon, segIdx };
 }
 
 /**
  * Snap a lat/lon to the nearest road via OSRM /nearest.
+ * Uses number=3 to get multiple candidates, picks the one farthest from original.
  */
-async function snapToNearestRoad(lat, lon) {
-  const url = `${OSRM_NEAREST_BASE}/${lon.toFixed(6)},${lat.toFixed(6)}?number=1`;
+async function snapToNearestRoad(lat, lon, originalRouteCoords) {
+  const url = `${OSRM_NEAREST_BASE}/${lon.toFixed(6)},${lat.toFixed(6)}?number=3`;
   try {
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     if (data.code === 'Ok' && data.waypoints?.length) {
+      // If we have the original route, try to pick a waypoint on a DIFFERENT road
+      if (originalRouteCoords && data.waypoints.length > 1) {
+        // Find the waypoint that is farthest from the original route
+        let bestWp = null;
+        let bestDist = -1;
+        for (const wp of data.waypoints) {
+          const [wLon, wLat] = wp.location;
+          // Compute minimum distance from this waypoint to the original route
+          let minDistToRoute = Infinity;
+          for (let i = 0; i < originalRouteCoords.length - 1; i++) {
+            const [rLon1, rLat1] = originalRouteCoords[i];
+            const [rLon2, rLat2] = originalRouteCoords[i + 1];
+            const d = pointToSegmentDistance(wLat, wLon, rLat1, rLon1, rLat2, rLon2);
+            if (d < minDistToRoute) minDistToRoute = d;
+          }
+          if (minDistToRoute > bestDist) {
+            bestDist = minDistToRoute;
+            bestWp = wp;
+          }
+        }
+        if (bestWp) {
+          const [snapLon, snapLat] = bestWp.location;
+          console.log('[Snap] Picked alternate road wp, dist from original route:', Math.round(bestDist), 'm');
+          return { lat: snapLat, lon: snapLon };
+        }
+      }
+      // Fallback: use the first (nearest) result
       const [snapLon, snapLat] = data.waypoints[0].location;
       return { lat: snapLat, lon: snapLon };
     }
@@ -693,11 +731,16 @@ async function snapToNearestRoad(lat, lon) {
  * Algorithm:
  *  1. Cluster cameras on the fastest route
  *  2. For each cluster, compute perpendicular avoidance waypoint
- *  3. Snap waypoints to nearest road
+ *  3. Snap waypoints to nearest road (preferring roads different from original)
  *  4. Sort waypoints by position along original route
  *  5. Request OSRM route through those waypoints
+ *  6. Retry with larger avoidance distances if ghost has >= fastest cameras
+ *  7. Try opposite perpendicular direction on retry
+ *  8. Fall back to best OSRM alternative if no improvement found
  */
-async function buildGhostRoute(fastestCoords, onRouteCameras) {
+async function buildGhostRoute(fastestCoords, onRouteCameras, altRoutes) {
+  const fastestCamCount = countCamerasOnCoords(fastestCoords);
+
   try {
     // 1. Cluster
     const clusters = clusterCameras(onRouteCameras);
@@ -706,50 +749,107 @@ async function buildGhostRoute(fastestCoords, onRouteCameras) {
     // Sort clusters by size descending (prioritize dense clusters)
     clusters.sort((a, b) => b.size - a.size);
 
-    // 2. Compute raw avoidance waypoints
-    const rawWaypoints = [];
-    for (const cluster of clusters) {
-      const wp = computePerpendicularWaypoint(cluster, fastestCoords);
-      if (wp) rawWaypoints.push(wp);
-      if (rawWaypoints.length >= MAX_GHOST_WAYPOINTS) break;
+    let bestGhostRoute = null;
+    let bestCamCount = Infinity;
+
+    // Try each avoidance distance, and both perpendicular directions
+    for (let attempt = 0; attempt < AVOIDANCE_DISTANCES.length; attempt++) {
+      const avoidDist = AVOIDANCE_DISTANCES[attempt];
+      for (const invertDir of [false, true]) {
+        // 2. Compute raw avoidance waypoints
+        const rawWaypoints = [];
+        for (const cluster of clusters) {
+          const wp = computePerpendicularWaypoint(cluster, fastestCoords, avoidDist, invertDir);
+          if (wp) rawWaypoints.push(wp);
+          if (rawWaypoints.length >= MAX_GHOST_WAYPOINTS) break;
+        }
+
+        if (rawWaypoints.length === 0) continue;
+
+        // 3. Sort waypoints by segment index
+        rawWaypoints.sort((a, b) => a.segIdx - b.segIdx);
+
+        // 4. Snap each waypoint to nearest road (prefer roads off the original route)
+        const snapped = await Promise.all(
+          rawWaypoints.map(wp => snapToNearestRoad(wp.lat, wp.lon, fastestCoords))
+        );
+
+        console.log(`[Ghost] Attempt ${attempt + 1} (dist=${avoidDist}m, invert=${invertDir}) waypoints:`, snapped);
+
+        // 5. Build OSRM URL
+        const s = startCoords;
+        const e = endCoords;
+        const waypointStr = snapped.map(w => `${w.lon.toFixed(6)},${w.lat.toFixed(6)}`).join(';');
+        const url = `${OSRM_BASE}/${s.lng.toFixed(6)},${s.lat.toFixed(6)};${waypointStr};${e.lng.toFixed(6)},${e.lat.toFixed(6)}?overview=full&geometries=geojson`;
+
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) continue;
+          const data = await resp.json();
+
+          if (data.code !== 'Ok' || !data.routes?.length) continue;
+
+          const candidate = data.routes[0];
+          const camCount = countCamerasOnCoords(candidate.geometry.coordinates);
+          console.log(`[Ghost] Attempt ${attempt + 1} invert=${invertDir}: ${camCount} cameras (fastest has ${fastestCamCount})`);
+
+          if (camCount < fastestCamCount && camCount < bestCamCount) {
+            bestCamCount = camCount;
+            bestGhostRoute = candidate;
+            console.log('[Ghost] New best ghost route found:', camCount, 'cameras');
+          }
+        } catch (err) {
+          console.warn('[Ghost] Route request failed:', err);
+          continue;
+        }
+
+        // If we found a good route, stop trying
+        if (bestGhostRoute && bestCamCount < fastestCamCount) break;
+      }
+
+      if (bestGhostRoute && bestCamCount < fastestCamCount) break;
     }
 
-    if (rawWaypoints.length === 0) {
-      console.log('[Ghost] No valid waypoints computed');
-      return null;
+    // If we found a ghost route with fewer cameras, use it
+    if (bestGhostRoute) {
+      return bestGhostRoute;
     }
 
-    // 3. Sort waypoints by segment index so we visit them in route order
-    rawWaypoints.sort((a, b) => a.segIdx - b.segIdx);
-
-    // 4. Snap each waypoint to nearest road
-    const snapped = await Promise.all(
-      rawWaypoints.map(wp => snapToNearestRoad(wp.lat, wp.lon))
-    );
-
-    console.log('[Ghost] Waypoints (snapped):', snapped);
-
-    // 5. Build OSRM URL: start → waypoints → end
-    const s = startCoords;
-    const e = endCoords;
-    const waypointStr = snapped.map(w => `${w.lon.toFixed(6)},${w.lat.toFixed(6)}`).join(';');
-    const url = `${OSRM_BASE}/${s.lng.toFixed(6)},${s.lat.toFixed(6)};${waypointStr};${e.lng.toFixed(6)},${e.lat.toFixed(6)}?overview=full&geometries=geojson`;
-
-    console.log('[Ghost] Requesting ghost route:', url);
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`OSRM HTTP ${resp.status}`);
-    const data = await resp.json();
-
-    if (data.code !== 'Ok' || !data.routes?.length) {
-      throw new Error(data.message || 'No ghost routes returned');
+    // 8. Fallback: use the best OSRM alternative route (fewest cameras)
+    console.log('[Ghost] No waypoint route improved camera count — trying OSRM alternatives');
+    if (altRoutes && altRoutes.length > 0) {
+      let bestAlt = null;
+      let bestAltCams = fastestCamCount;
+      for (const alt of altRoutes) {
+        const camCount = countCamerasOnCoords(alt.geometry.coordinates);
+        if (camCount < bestAltCams) {
+          bestAltCams = camCount;
+          bestAlt = alt;
+        }
+      }
+      if (bestAlt) {
+        console.log('[Ghost] Using best OSRM alternative with', bestAltCams, 'cameras');
+        return bestAlt;
+      }
     }
 
-    return data.routes[0];
+    console.log('[Ghost] No improvement found, ghost route skipped');
+    return null;
 
   } catch (err) {
     console.warn('[Ghost] Ghost route build failed:', err);
     return null;
   }
+}
+
+/** Count cameras on a coordinate array (internal helper) */
+function countCamerasOnCoords(coords) {
+  if (!cameras.length) return 0;
+  let count = 0;
+  for (const cam of cameras) {
+    if (isCameraOnRoute(cam, coords)) count++;
+  }
+  return count;
 }
 
 // ─── Geometry helpers ─────────────────────────────────────────────────────────
@@ -812,13 +912,16 @@ function drawRouteItem(item) {
   // OSRM returns [lng, lat] — Leaflet polyline needs [lat, lng]
   const latlngs = coords.map(([lon, lat]) => [lat, lon]);
 
-  const layer = L.polyline(latlngs, {
+  const options = {
     color:    style.color,
     weight:   style.weight,
     opacity:  style.opacity,
     lineJoin: 'round',
     lineCap:  'round',
-  }).addTo(map);
+  };
+  if (style.dashArray) options.dashArray = style.dashArray;
+
+  const layer = L.polyline(latlngs, options).addTo(map);
 
   layer.on('click', () => activateRoute(id));
   routeLayers.push({ id, layer, type });
@@ -830,12 +933,20 @@ function activateRoute(id) {
   routeLayers.forEach(({ layer, id: rId, type }) => {
     const style = ROUTE_COLORS[type] || ROUTE_COLORS.alt;
     if (rId === id) {
-      layer.setStyle({ weight: style.weight + 3, opacity: 1 });
+      const activeStyle = { weight: style.weight + 2, opacity: 1 };
+      if (style.dashArray) activeStyle.dashArray = style.dashArray;
+      layer.setStyle(activeStyle);
       layer.bringToFront();
     } else {
-      layer.setStyle({ weight: style.weight, opacity: style.opacity * 0.4 });
+      const inactiveStyle = { weight: style.weight, opacity: style.opacity * 0.45 };
+      if (style.dashArray) inactiveStyle.dashArray = style.dashArray;
+      layer.setStyle(inactiveStyle);
     }
   });
+
+  // Keep ghost always visually above fastest
+  const ghostLayer = routeLayers.find(r => r.type === 'ghost');
+  if (ghostLayer) ghostLayer.layer.bringToFront();
 
   document.querySelectorAll('.route-card').forEach(card => {
     card.classList.toggle('active', card.dataset.id === id);
