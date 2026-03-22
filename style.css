@@ -823,6 +823,201 @@ html, body {
   opacity: 0.85;
 }
 
+/* ── Commute Banner ───────────────────────────────────── */
+#commute-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: linear-gradient(90deg, rgba(167,139,250,0.12), rgba(34,197,94,0.08));
+  border-bottom: 1px solid rgba(167,139,250,0.3);
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  z-index: 999;
+}
+
+.commute-banner-icon {
+  font-size: 18px;
+}
+
+#commute-banner-msg {
+  flex: 1;
+  color: var(--accent-ghost);
+  font-weight: 500;
+}
+
+.commute-banner-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-commute {
+  padding: 5px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(167,139,250,0.4);
+  background: rgba(167,139,250,0.15);
+  color: var(--accent-ghost);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-commute:hover {
+  background: rgba(167,139,250,0.25);
+  border-color: var(--accent-ghost);
+}
+
+.btn-commute-clear {
+  padding: 5px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(239,68,68,0.3);
+  background: rgba(239,68,68,0.08);
+  color: var(--accent-red);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-commute-clear:hover {
+  background: rgba(239,68,68,0.15);
+  border-color: var(--accent-red);
+}
+
+/* ── Save Commute Button ───────────────────────────────── */
+#save-commute-row {
+  display: flex;
+  justify-content: center;
+}
+
+.btn-save-commute {
+  width: 100%;
+  padding: 9px 16px;
+  border-radius: var(--radius);
+  border: 1px dashed rgba(167,139,250,0.35);
+  background: rgba(167,139,250,0.06);
+  color: var(--accent-ghost);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-save-commute:hover {
+  background: rgba(167,139,250,0.14);
+  border-color: var(--accent-ghost);
+  border-style: solid;
+}
+
+/* ── Commute Stats Panel ──────────────────────────────── */
+#commute-stats-panel {
+  background: var(--bg-card);
+  border: 1px solid rgba(167,139,250,0.25);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.commute-stats-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.commute-stats-icon { font-size: 16px; }
+
+.commute-stats-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-ghost);
+}
+
+.commute-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.commute-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.commute-stat-wide {
+  grid-column: 1 / -1;
+}
+
+.commute-stat-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.commute-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent-ghost);
+}
+
+.commute-stat-unit {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* ── Sparkline ────────────────────────────────────────── */
+.commute-trend-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.commute-sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 36px;
+}
+
+.sparkline-bar {
+  flex: 1;
+  min-height: 3px;
+  border-radius: 2px 2px 0 0;
+  transition: opacity 0.2s;
+  position: relative;
+}
+
+.sparkline-bar:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.8);
+  color: var(--accent-ghost);
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sparkline-empty {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 /* ── Responsive ───────────────────────────────────────── */
 @media (max-width: 768px) {
   #main {

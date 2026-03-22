@@ -293,21 +293,22 @@ function pinIcon(color, letter) {
   });
 }
 
-function cameraIcon(direction) {
-  const arrow = direction != null ? arrowSvg(direction) : '';
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
-      <circle cx="10" cy="10" r="8" fill="#ef4444" stroke="rgba(0,0,0,0.4)" stroke-width="1.5"
-              fill-opacity="0.85"/>
-      <text x="10" y="14" text-anchor="middle" font-size="10" fill="white">📷</text>
-      ${arrow}
-    </svg>`;
+function operatorColor(type) {
+  return { police: '#3366cc', government: '#6600cc', private: '#cc6600', unknown: '#888' }[type] || '#888';
+}
+
+function cameraIcon(cam, bearing) {
+  const opType = (cam && cam.tags && cam.tags['operator:type']) || 'unknown';
+  const color  = operatorColor(opType);
+  const arrow  = bearing !== null && bearing !== undefined
+    ? `<div style="transform:rotate(${bearing}deg);font-size:16px;line-height:1">→</div>`
+    : '<div style="font-size:14px;line-height:1">📷</div>';
   return L.divIcon({
-    html:       svg,
-    className:  '',
-    iconSize:   [20, 20],
-    iconAnchor: [10, 10],
-    popupAnchor:[0, -12],
+    html:        `<div style="color:${color};text-shadow:1px 1px 2px black">${arrow}</div>`,
+    className:   '',
+    iconSize:    [20, 20],
+    iconAnchor:  [10, 10],
+    popupAnchor: [0, -12],
   });
 }
 
@@ -360,21 +361,24 @@ function processCameras(elements) {
 
   cameras.forEach(cam => {
     const bearing = parseBearing(cam.tags.direction || cam.tags['camera:direction']);
-    const marker  = L.marker([cam.lat, cam.lon], { icon: cameraIcon(bearing) })
+    const marker  = L.marker([cam.lat, cam.lon], { icon: cameraIcon(cam, bearing) })
       .addTo(map)
       .on('click', () => showCameraDetail(cam));
 
-    const mfr   = cam.tags.manufacturer    || cam.tags.brand                    || 'Unknown';
-    const op    = cam.tags.operator        || cam.tags['operator:short']         || 'Unknown';
-    const dir   = cam.tags.direction       || cam.tags['camera:direction']       || 'Unknown';
-    const model = cam.tags['camera:model'] || cam.tags.model                    || '';
+    const mfr    = cam.tags.manufacturer    || cam.tags.brand                    || 'Unknown';
+    const op     = cam.tags.operator        || cam.tags['operator:short']         || 'Unknown';
+    const opType = cam.tags['operator:type']                                      || 'Unknown';
+    const dir    = cam.tags.direction       || cam.tags['camera:direction']       || 'Unknown';
+    const model  = cam.tags['camera:model'] || cam.tags.model                    || '';
 
     marker.bindPopup(`
       <div class="popup-title">📷 ALPR Camera</div>
       <div class="popup-row"><span>Manufacturer:</span><strong>${escHtml(mfr)}</strong></div>
       <div class="popup-row"><span>Operator:</span><strong>${escHtml(op)}</strong></div>
-      <div class="popup-row"><span>Direction:</span><strong>${escHtml(dir)}</strong></div>
+      <div class="popup-row"><span>Type:</span><strong>${escHtml(opType)}</strong></div>
+      <div class="popup-row"><span>Direction:</span><strong>${escHtml(dir)}°</strong></div>
       ${model ? `<div class="popup-row"><span>Model:</span><strong>${escHtml(model)}</strong></div>` : ''}
+      <div class="popup-row"><span>OSM:</span><a href="https://osm.org/node/${cam.id}" target="_blank">${cam.id}</a></div>
     `);
 
     cameraMarkers.push(marker);
@@ -544,9 +548,21 @@ async function processRoutes(routes) {
   showPanel('results');
   setHint('✅ Routes calculated — click a route to highlight');
 
+  // ── Show route comparison overlay ──
+  displayRouteComparison(fastest, ghostItem ? ghostItem.route : null);
+
   // ── Auto-select preferred route ──
   const defaultId = (preferGhost && ghostItem) ? 'ghost' : 'fastest';
   activateRoute(defaultId);
+
+  // ── Encode state into URL hash for sharing ──
+  const startInput = document.getElementById('start-input').value;
+  const endInput   = document.getElementById('end-input').value;
+  if (startCoords && endCoords) {
+    encodeRouteHash(startInput, endInput, startCoords, endCoords);
+    const shareBtn = document.getElementById('share-btn');
+    if (shareBtn) shareBtn.classList.remove('hidden');
+  }
 }
 
 // ─── Ghost route engine ───────────────────────────────────────────────────────
@@ -903,6 +919,69 @@ function isCameraOnRoute(cam, coords) {
   return false;
 }
 
+// ─── Route comparison panel ───────────────────────────────────────────────────
+
+/**
+ * Count cameras within CAMERA_PROXIMITY_M of any segment in a GeoJSON geometry.
+ * @param {object} geometry - GeoJSON LineString geometry { type, coordinates: [[lon,lat],...] }
+ * @param {Array}  cams     - array of camera objects with lat/lon
+ * @returns {number} integer count
+ */
+function countCamerasOnRoute(geometry, cams) {
+  if (!cams || !cams.length || !geometry) return 0;
+  const coords = geometry.coordinates;
+  let count = 0;
+  for (const cam of cams) {
+    if (isCameraOnRoute(cam, coords)) count++;
+  }
+  return count;
+}
+
+/**
+ * Display the route comparison overlay panel (top-right of map).
+ * @param {object} fastest - OSRM route object with .geometry, .distance, .duration
+ * @param {object} ghost   - OSRM route object or null
+ */
+function displayRouteComparison(fastest, ghost) {
+  const panel = document.getElementById('route-results');
+  if (!panel) return;
+
+  const fastCams = countCamerasOnRoute(fastest.geometry, cameras);
+  const fastScore = Math.max(0, 100 - fastCams * 8);
+  const fastMins = Math.round(fastest.duration / 60);
+  const fastKm   = (fastest.distance / 1000).toFixed(1);
+
+  document.getElementById('fastest-stats').innerHTML =
+    `<b style="color:#ff6666">Fastest Route</b><br>` +
+    `${fastKm} km | ${fastMins} min<br>` +
+    `Cameras: ${fastCams} | Score: <b>${fastScore}/100</b>`;
+
+  if (ghost) {
+    const ghostCams  = countCamerasOnRoute(ghost.geometry, cameras);
+    const ghostScore = Math.max(0, 100 - ghostCams * 8);
+    const ghostMins  = Math.round(ghost.duration / 60);
+    const ghostKm    = (ghost.distance / 1000).toFixed(1);
+    const distRatio  = (ghost.distance / fastest.distance * 100 - 100).toFixed(0);
+    const timeExtra  = Math.round((ghost.duration - fastest.duration) / 60);
+    const avoided    = Math.max(0, fastCams - ghostCams);
+
+    document.getElementById('ghost-stats').innerHTML =
+      `<b style="color:#00ff88">Ghost Route</b><br>` +
+      `${ghostKm} km | ${ghostMins} min<br>` +
+      `Cameras: ${ghostCams} | Score: <b>${ghostScore}/100</b>`;
+
+    document.getElementById('delta-stats').innerHTML =
+      `<b>Avoided:</b> ${avoided} camera${avoided !== 1 ? 's' : ''}<br>` +
+      `<b>Extra time:</b> +${timeExtra} min | +${distRatio}%`;
+  } else {
+    document.getElementById('ghost-stats').innerHTML =
+      `<span style="color:#888">Ghost Route: not available</span>`;
+    document.getElementById('delta-stats').innerHTML = '';
+  }
+
+  panel.style.display = 'block';
+}
+
 // ─── Route drawing ────────────────────────────────────────────────────────────
 
 function drawRouteItem(item) {
@@ -1057,6 +1136,19 @@ function renderDualRoutePanel(fastestItem, ghostItem, altItems) {
       <div class="legend-item"><span class="legend-dot" style="background:#94a3b8"></span> Alternatives</div>
     `;
   }
+
+  // ── Save as My Commute button ──
+  const commute = loadCommute();
+  if (!commute) {
+    // No saved commute — show the save button
+    showSaveCommuteBtn(true);
+  } else {
+    // Commute already saved — hide save button
+    showSaveCommuteBtn(false);
+  }
+
+  // ── Commute stats (if in commute mode) ──
+  updateCommuteStats(fastestItem, ghostItem, altItems);
 }
 
 function buildRouteCard(item, label, type, savedCams) {
@@ -1183,9 +1275,319 @@ function clearAll() {
   showPanel('idle');
   setHint('Enter start and destination to compare routes');
   document.getElementById('camera-detail-panel').classList.add('hidden');
+  document.getElementById('commute-stats-panel').classList.add('hidden');
+  document.getElementById('save-commute-row').classList.add('hidden');
+  isCommuteMode = false;
+  const routeResultsPanel = document.getElementById('route-results');
+  if (routeResultsPanel) routeResultsPanel.style.display = 'none';
 
   startInputCtrl.reset();
   endInputCtrl.reset();
+
+  // Clear URL hash and hide share button
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+  const shareBtn = document.getElementById('share-btn');
+  if (shareBtn) shareBtn.classList.add('hidden');
+}
+
+// ─── Share / URL hash ─────────────────────────────────────────────────────────
+
+/**
+ * Encode current route state into URL hash.
+ * Format: base64(JSON({ origin, destination, originCoords, destinationCoords }))
+ */
+function encodeRouteHash(originText, destinationText, originCoords, destCoords) {
+  const state = {
+    origin:      originText,
+    destination: destinationText,
+    oLat:        originCoords.lat,
+    oLng:        originCoords.lng,
+    dLat:        destCoords.lat,
+    dLng:        destCoords.lng,
+    mode:        'privacy',
+  };
+  try {
+    window.location.hash = btoa(JSON.stringify(state));
+  } catch (e) {
+    console.warn('[Share] Could not encode hash:', e);
+  }
+}
+
+/**
+ * Decode route state from URL hash if present.
+ * Returns parsed state object or null.
+ */
+function decodeRouteHash() {
+  const hash = window.location.hash.slice(1); // strip leading '#'
+  if (!hash) return null;
+  try {
+    return JSON.parse(atob(hash));
+  } catch (e) {
+    console.warn('[Share] Could not decode hash:', e);
+    return null;
+  }
+}
+
+/**
+ * Show the "Link copied!" toast for 2 seconds.
+ */
+function showCopyToast() {
+  const toast = document.getElementById('share-toast');
+  if (!toast) return;
+  toast.style.opacity = '1';
+  setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+}
+
+// ─── My Commute ───────────────────────────────────────────────────────────────
+
+const COMMUTE_KEY         = 'ghost_commute';
+const COMMUTE_HISTORY_KEY = 'ghost_commute_history';
+const MAX_COMMUTE_HISTORY = 7;
+
+let isCommuteMode = false; // true when current route was loaded from saved commute
+
+/**
+ * Load saved commute from localStorage.
+ * Returns { home, work, homeName, workName } or null.
+ */
+function loadCommute() {
+  try {
+    const raw = localStorage.getItem(COMMUTE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Save current origin/destination as "My Commute".
+ */
+function saveCommute() {
+  const commute = {
+    home:     { ...startCoords },
+    work:     { ...endCoords },
+    homeName: document.getElementById('start-input').value,
+    workName: document.getElementById('end-input').value,
+    savedAt:  Date.now(),
+  };
+  localStorage.setItem(COMMUTE_KEY, JSON.stringify(commute));
+  isCommuteMode = true;
+  showCommuteBanner(commute, null); // camera count will update after route calc
+  showSaveCommuteBtn(false);
+  // flash confirm
+  setHint('🏠 Commute saved! It will appear on your next visit.');
+  setTimeout(() => setHint('✅ Routes calculated — click a route to highlight'), 2500);
+}
+
+/**
+ * Clear saved commute from localStorage.
+ */
+function clearCommute() {
+  localStorage.removeItem(COMMUTE_KEY);
+  localStorage.removeItem(COMMUTE_HISTORY_KEY);
+  isCommuteMode = false;
+  document.getElementById('commute-banner').classList.add('hidden');
+  document.getElementById('commute-stats-panel').classList.add('hidden');
+  document.getElementById('save-commute-row').classList.remove('hidden');
+}
+
+/**
+ * Show/hide the "Save as My Commute" button.
+ */
+function showSaveCommuteBtn(show) {
+  const row = document.getElementById('save-commute-row');
+  if (show) {
+    row.classList.remove('hidden');
+  } else {
+    row.classList.add('hidden');
+  }
+}
+
+/**
+ * Show the commute banner with camera count.
+ * @param {object} commute - saved commute object
+ * @param {number|null} cameraCount - number of cameras on route (null = unknown)
+ */
+function showCommuteBanner(commute, cameraCount) {
+  const banner = document.getElementById('commute-banner');
+  const msg    = document.getElementById('commute-banner-msg');
+
+  const camTxt = (cameraCount !== null && cameraCount !== undefined)
+    ? `Your commute passes <strong>${cameraCount}</strong> camera${cameraCount !== 1 ? 's' : ''} today.`
+    : `Your commute is saved.`;
+
+  msg.innerHTML = `Welcome back. ${camTxt}`;
+  banner.classList.remove('hidden');
+}
+
+/**
+ * Run the saved commute in privacy mode (auto-loads and calculates route).
+ */
+async function runSavedCommute(commute) {
+  isCommuteMode = true;
+  showSaveCommuteBtn(false);
+
+  startCoords = { ...commute.home };
+  endCoords   = { ...commute.work };
+
+  placeStartMarker(startCoords.lat, startCoords.lng);
+  placeEndMarker(endCoords.lat, endCoords.lng);
+
+  startInputCtrl.setValue(commute.homeName || 'Home');
+  endInputCtrl.setValue(commute.workName   || 'Work');
+
+  map.setView(
+    [(startCoords.lat + endCoords.lat) / 2, (startCoords.lng + endCoords.lng) / 2],
+    13
+  );
+
+  clearRouteLayers();
+  await fetchRoutes();
+}
+
+/**
+ * Update commute stats panel with route data.
+ * @param {object} fastestItem - fastest route item
+ * @param {object|null} ghostItem - ghost route item (or null)
+ * @param {Array} altItems - alternative route items
+ */
+function updateCommuteStats(fastestItem, ghostItem, altItems) {
+  if (!isCommuteMode) return;
+
+  const panel = document.getElementById('commute-stats-panel');
+  panel.classList.remove('hidden');
+
+  // Daily camera exposure (cameras/km on the displayed route = ghost if available else fastest)
+  const displayRoute = ghostItem || fastestItem;
+  const routeKm = displayRoute.distance / 1000;
+  const camsPerKm = routeKm > 0 ? (displayRoute.cameraHits / routeKm).toFixed(2) : '0.00';
+  document.getElementById('commute-stat-density').textContent = camsPerKm;
+
+  // Privacy score for today's commute
+  const score = Math.max(0, 100 - displayRoute.cameraHits * 8);
+  document.getElementById('commute-stat-score').textContent = score;
+
+  // Best alternative saved vs fastest
+  const allAlt = altItems || [];
+  const allRoutes = [fastestItem, ghostItem, ...allAlt].filter(Boolean);
+  const bestAlt = allRoutes.reduce((best, r) => {
+    if (r === fastestItem) return best;
+    if (!best || r.cameraHits < best.cameraHits) return r;
+    return best;
+  }, null);
+  const savedVsFastest = bestAlt ? Math.max(0, fastestItem.cameraHits - bestAlt.cameraHits) : 0;
+  document.getElementById('commute-stat-alt-saved').textContent = savedVsFastest;
+
+  // Store today's score in history
+  storeCommuteHistory(score);
+
+  // Render sparkline
+  renderSparkline();
+
+  // Update banner with camera count
+  const commute = loadCommute();
+  if (commute) {
+    showCommuteBanner(commute, fastestItem.cameraHits);
+  }
+}
+
+/**
+ * Store today's privacy score in 7-day history.
+ * Deduplicates by date (only one entry per day).
+ */
+function storeCommuteHistory(score) {
+  let history = [];
+  try {
+    const raw = localStorage.getItem(COMMUTE_HISTORY_KEY);
+    history = raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    history = [];
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Update or add today's entry
+  const existingIdx = history.findIndex(h => h.date === today);
+  if (existingIdx >= 0) {
+    history[existingIdx].score = score;
+  } else {
+    history.push({ date: today, score });
+  }
+
+  // Keep only last 7 days
+  history.sort((a, b) => a.date.localeCompare(b.date));
+  if (history.length > MAX_COMMUTE_HISTORY) {
+    history = history.slice(-MAX_COMMUTE_HISTORY);
+  }
+
+  localStorage.setItem(COMMUTE_HISTORY_KEY, JSON.stringify(history));
+}
+
+/**
+ * Render the 7-day sparkline from history.
+ */
+function renderSparkline() {
+  const container = document.getElementById('commute-sparkline');
+  if (!container) return;
+
+  let history = [];
+  try {
+    const raw = localStorage.getItem(COMMUTE_HISTORY_KEY);
+    history = raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    history = [];
+  }
+
+  if (history.length === 0) {
+    container.innerHTML = `<span class="sparkline-empty">No history yet — run your commute daily to build a trend.</span>`;
+    return;
+  }
+
+  // Fill gaps: build a 7-slot array ending today
+  const today = new Date();
+  const slots = [];
+  for (let i = MAX_COMMUTE_HISTORY - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const entry   = history.find(h => h.date === dateStr);
+    slots.push({ date: dateStr, score: entry ? entry.score : null });
+  }
+
+  const maxScore = 100;
+  const minScore = 0;
+
+  container.innerHTML = slots.map(slot => {
+    if (slot.score === null) {
+      return `<div class="sparkline-bar" style="background:var(--border);opacity:0.3;height:4px" data-tip="${slot.date}: no data"></div>`;
+    }
+    const pct    = Math.round(((slot.score - minScore) / (maxScore - minScore)) * 100);
+    const height = Math.max(4, Math.round((pct / 100) * 36));
+    const color  = slot.score >= 80 ? '#22c55e'
+                 : slot.score >= 50 ? '#eab308'
+                 : '#ef4444';
+    const isToday = slot.date === today.toISOString().slice(0, 10);
+    const border  = isToday ? `box-shadow:0 0 0 1px ${color};` : '';
+    return `<div class="sparkline-bar" style="background:${color};height:${height}px;${border}" data-tip="${slot.date}: ${slot.score}/100"></div>`;
+  }).join('');
+}
+
+/**
+ * Check on page load if a commute is saved, and show the banner.
+ */
+function initCommuteBanner() {
+  const commute = loadCommute();
+  if (!commute) return;
+
+  showCommuteBanner(commute, null);
+
+  document.getElementById('commute-view-btn').addEventListener('click', () => {
+    runSavedCommute(commute);
+  });
+
+  document.getElementById('commute-clear-btn').addEventListener('click', () => {
+    clearCommute();
+  });
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
@@ -1252,6 +1654,68 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('close-camera-detail').addEventListener('click', () => {
     document.getElementById('camera-detail-panel').classList.add('hidden');
   });
+
+  // Save commute button
+  document.getElementById('save-commute-btn').addEventListener('click', () => {
+    if (!startCoords || !endCoords) return;
+    saveCommute();
+    // Re-wire the banner buttons since commute was just saved
+    document.getElementById('commute-view-btn').onclick = () => {
+      const c = loadCommute();
+      if (c) runSavedCommute(c);
+    };
+    document.getElementById('commute-clear-btn').onclick = () => clearCommute();
+  });
+
+  // Init commute banner on load
+  initCommuteBanner();
+
+  // Share button
+  document.getElementById('share-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText(window.location.href)
+      .then(() => showCopyToast())
+      .catch(() => {
+        // Fallback for browsers without clipboard API
+        prompt('Copy this link:', window.location.href);
+      });
+  });
+
+  // ── Restore from URL hash ──
+  const hashState = decodeRouteHash();
+  if (hashState && hashState.oLat && hashState.dLat) {
+    console.log('[Share] Restoring route from URL hash:', hashState);
+
+    const originItem = {
+      name: hashState.origin,
+      address: '',
+      lat: hashState.oLat,
+      lng: hashState.oLng,
+    };
+    const destItem = {
+      name: hashState.destination,
+      address: '',
+      lat: hashState.dLat,
+      lng: hashState.dLng,
+    };
+
+    startInputCtrl.setValue(hashState.origin);
+    endInputCtrl.setValue(hashState.destination);
+
+    placeStartMarker(originItem.lat, originItem.lng);
+    placeEndMarker(destItem.lat, destItem.lng);
+
+    // Center map between both points
+    map.setView(
+      [(originItem.lat + destItem.lat) / 2, (originItem.lng + destItem.lng) / 2],
+      13
+    );
+
+    // Auto-calculate route
+    setTimeout(() => {
+      clearRouteLayers();
+      fetchRoutes();
+    }, 500);
+  }
 
   window.addEventListener('resize', () => map.invalidateSize());
 });

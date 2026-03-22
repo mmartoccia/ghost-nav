@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ghost — Privacy-Aware Navigation</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="style.css?v=1774200000" />
+  <link rel="stylesheet" href="style.css?v=1774219619" />
 </head>
 <body>
   <div id="app">
@@ -17,20 +17,63 @@
         <span class="brand-tagline">privacy-aware navigation</span>
       </div>
       <div id="header-actions">
+        <button id="share-btn" class="btn btn-ghost hidden" title="Copy shareable link">🔗 Share</button>
         <button id="clear-btn" class="btn btn-ghost">Clear</button>
       </div>
     </header>
+
+    <!-- Toast notification -->
+    <div id="share-toast" style="
+      position:fixed;
+      bottom:24px;
+      left:50%;
+      transform:translateX(-50%);
+      background:rgba(0,0,0,0.85);
+      color:#00ff88;
+      padding:10px 20px;
+      border-radius:8px;
+      font-family:monospace;
+      font-size:14px;
+      z-index:9999;
+      pointer-events:none;
+      opacity:0;
+      transition:opacity 0.3s ease;
+    ">🔗 Link copied!</div>
+
+    <!-- Commute Banner (shown when a saved commute exists) -->
+    <div id="commute-banner" class="hidden">
+      <span class="commute-banner-icon">🏠</span>
+      <span id="commute-banner-msg">Welcome back.</span>
+      <div class="commute-banner-actions">
+        <button id="commute-view-btn" class="btn btn-commute">View Route</button>
+        <button id="commute-clear-btn" class="btn btn-commute-clear">Clear</button>
+      </div>
+    </div>
 
     <!-- Main content -->
     <div id="main">
       <!-- Map -->
       <div id="map-container">
         <div id="map"></div>
+        <div id="route-results" style="display:none;position:absolute;top:10px;right:10px;z-index:1000;background:rgba(0,0,0,0.85);color:white;padding:16px;border-radius:8px;width:280px;font-family:monospace;font-size:13px">
+          <h3 style="margin:0 0 12px;color:#00ff88">Route Comparison</h3>
+          <div id="fastest-stats"></div>
+          <hr style="border-color:#444">
+          <div id="ghost-stats"></div>
+          <hr style="border-color:#444">
+          <div id="delta-stats"></div>
+        </div>
         <div id="map-hint">
           <span id="hint-text">Enter start and destination to compare routes</span>
         </div>
         <div id="camera-count-badge" class="hidden">
           <span id="camera-count-num">0</span> ALPR cameras loaded
+        </div>
+        <div id="camera-legend" style="position:absolute;bottom:30px;left:10px;z-index:1000;background:rgba(0,0,0,0.7);color:white;padding:8px;border-radius:4px;font-size:12px;pointer-events:none">
+          <div><span style="color:#3366cc;font-size:16px">→</span> Police / Government</div>
+          <div><span style="color:#6600cc;font-size:16px">→</span> Government</div>
+          <div><span style="color:#cc6600;font-size:16px">→</span> Private (Flock/HOA)</div>
+          <div><span style="color:#888;font-size:14px">📷</span> Unknown</div>
         </div>
       </div>
 
@@ -94,6 +137,41 @@
 
         <div id="panel-results" class="hidden">
           <div id="route-cards"></div>
+
+          <!-- Save as My Commute button (shown after route calculated) -->
+          <div id="save-commute-row" class="hidden">
+            <button id="save-commute-btn" class="btn btn-save-commute">🏠 Save as My Commute</button>
+          </div>
+
+          <!-- Commute Stats panel (only visible in commute mode) -->
+          <div id="commute-stats-panel" class="hidden">
+            <div class="commute-stats-header">
+              <span class="commute-stats-icon">📊</span>
+              <span class="commute-stats-title">Commute Stats</span>
+            </div>
+            <div class="commute-stats-grid">
+              <div class="commute-stat-item">
+                <span class="commute-stat-label">Daily Camera Exposure</span>
+                <span id="commute-stat-density" class="commute-stat-value">—</span>
+                <span class="commute-stat-unit">cameras/km</span>
+              </div>
+              <div class="commute-stat-item">
+                <span class="commute-stat-label">Privacy Score Today</span>
+                <span id="commute-stat-score" class="commute-stat-value">—</span>
+                <span class="commute-stat-unit">/ 100</span>
+              </div>
+              <div class="commute-stat-item commute-stat-wide">
+                <span class="commute-stat-label">Best Alternative Saved</span>
+                <span id="commute-stat-alt-saved" class="commute-stat-value">—</span>
+                <span class="commute-stat-unit">cameras vs fastest</span>
+              </div>
+            </div>
+            <div class="commute-trend-section">
+              <span class="commute-stat-label">7-Day Privacy Trend</span>
+              <div id="commute-sparkline" class="commute-sparkline"></div>
+            </div>
+          </div>
+
           <div id="legend">
             <div class="legend-item"><span class="legend-dot green"></span> Fewest cameras</div>
             <div class="legend-item"><span class="legend-dot yellow"></span> Middle</div>
@@ -117,6 +195,6 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app.js?v=1774190017"></script>
+  <script src="app.js?v=1774219619"></script>
 </body>
 </html>

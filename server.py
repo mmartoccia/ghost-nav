@@ -7,9 +7,63 @@ import json
 import os
 import math
 import time
+import threading
 
 PORT = 8766
 DIR = os.path.dirname(os.path.abspath(__file__))
+VERSION = '1.0'
+
+# ─── Camera cache (in-memory, keyed by bbox string) ───────────────────────────
+_camera_cache = {}          # bbox_key → {'cameras': [...], 'ts': float}
+_camera_cache_lock = threading.Lock()
+CAMERA_CACHE_TTL = 300      # 5 minutes
+
+def _bbox_key(min_lat, min_lon, max_lat, max_lon):
+    return f'{min_lat:.4f},{min_lon:.4f},{max_lat:.4f},{max_lon:.4f}'
+
+def fetch_cameras_cached(min_lat, min_lon, max_lat, max_lon):
+    """Fetch cameras with short-lived in-memory cache."""
+    key = _bbox_key(min_lat, min_lon, max_lat, max_lon)
+    now = time.time()
+    with _camera_cache_lock:
+        entry = _camera_cache.get(key)
+        if entry and now - entry['ts'] < CAMERA_CACHE_TTL:
+            return entry['cameras']
+    cameras = fetch_cameras_in_bbox(min_lat, min_lon, max_lat, max_lon)
+    with _camera_cache_lock:
+        _camera_cache[key] = {'cameras': cameras, 'ts': now}
+    return cameras
+
+def _total_cached_cameras():
+    """Return total number of unique cameras currently in cache."""
+    with _camera_cache_lock:
+        seen = set()
+        for entry in _camera_cache.values():
+            for c in entry['cameras']:
+                seen.add(c['id'])
+        return len(seen)
+
+# ─── Rate limiter (token bucket, 60 req/min per IP) ───────────────────────────
+_rate_buckets = {}          # ip → {'tokens': float, 'last': float}
+_rate_lock = threading.Lock()
+RATE_LIMIT = 60             # tokens per minute
+RATE_REFILL = RATE_LIMIT / 60.0  # tokens per second
+
+def _check_rate_limit(ip):
+    """Return True if request is allowed, False if rate-limited."""
+    now = time.time()
+    with _rate_lock:
+        bucket = _rate_buckets.get(ip)
+        if bucket is None:
+            _rate_buckets[ip] = {'tokens': RATE_LIMIT - 1, 'last': now}
+            return True
+        elapsed = now - bucket['last']
+        bucket['tokens'] = min(RATE_LIMIT, bucket['tokens'] + elapsed * RATE_REFILL)
+        bucket['last'] = now
+        if bucket['tokens'] >= 1:
+            bucket['tokens'] -= 1
+            return True
+        return False
 
 # ─── Geometry helpers ──────────────────────────────────────────────────────────
 
@@ -340,7 +394,7 @@ def ghost_route_fn(start_lon, start_lat, end_lon, end_lat):
     lats = [c[1] for c in fastest_coords]
     lons = [c[0] for c in fastest_coords]
     pad = 0.02  # ~2km padding to catch cameras on nearby roads
-    cameras = fetch_cameras_in_bbox(
+    cameras = fetch_cameras_cached(
         min(lats) - pad, min(lons) - pad,
         max(lats) + pad, max(lons) + pad,
     )
@@ -562,9 +616,98 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'error': str(e)}).encode())
 
+    def _check_rate(self):
+        """Return True (allowed) or send 429 and return False."""
+        ip = self.client_address[0]
+        if _check_rate_limit(ip):
+            return True
+        self._send_json({'error': 'Rate limit exceeded. Max 60 requests/min.'}, 429)
+        return False
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
     def do_POST(self):
         content_length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_length)
+
+        # ── POST /api/v1/route ────────────────────────────────────────────────
+        if self.path == '/api/v1/route':
+            if not self._check_rate():
+                return
+            try:
+                req_data = json.loads(body)
+            except Exception:
+                self._send_json({'error': 'Invalid JSON body'}, 400)
+                return
+
+            start = req_data.get('start')
+            end   = req_data.get('end')
+            mode  = req_data.get('mode', 'both')
+
+            if (not isinstance(start, list) or len(start) != 2 or
+                    not isinstance(end, list) or len(end) != 2):
+                self._send_json({'error': 'start and end must be [lat, lon] arrays'}, 400)
+                return
+            if mode not in ('fastest', 'ghost', 'both'):
+                self._send_json({'error': 'mode must be fastest, ghost, or both'}, 400)
+                return
+
+            start_lat, start_lon = float(start[0]), float(start[1])
+            end_lat,   end_lon   = float(end[0]),   float(end[1])
+
+            print(f'[API /route] {start_lat},{start_lon} → {end_lat},{end_lon} mode={mode}')
+            result, status = ghost_route_fn(start_lon, start_lat, end_lon, end_lat)
+
+            if 'error' in result:
+                self._send_json(result, status)
+                return
+
+            # Build response in the v1 schema
+            def _fmt_route(r):
+                return {
+                    'geometry':      r.get('geometry', ''),
+                    'distance_m':    int(r.get('distance', 0)),
+                    'duration_s':    int(r.get('duration', 0)),
+                    'cameras':       r.get('cameras', 0),
+                    'privacy_score': compute_score(
+                        r.get('distance', 0),
+                        result['fastest_route'].get('distance', 1),
+                        result.get('cameras_avoided', 0),
+                        result['fastest_route'].get('cameras', 0),
+                    ) if r is not result['fastest_route'] else max(0, 100 - r.get('cameras', 0) * 10),
+                }
+
+            fastest_r = result['fastest_route']
+            ghost_r   = result['ghost_route']
+            fastest_fmt = _fmt_route(fastest_r)
+            ghost_fmt   = _fmt_route(ghost_r)
+
+            extra_dist = max(0, ghost_r.get('distance', 0) - fastest_r.get('distance', 0))
+            extra_dur  = max(0, ghost_r.get('duration', 0) - fastest_r.get('duration', 0))
+
+            if mode == 'fastest':
+                out = {'fastest': fastest_fmt}
+            elif mode == 'ghost':
+                out = {
+                    'ghost': ghost_fmt,
+                    'cameras_avoided': result.get('cameras_avoided', 0),
+                }
+            else:  # both
+                out = {
+                    'fastest':         fastest_fmt,
+                    'ghost':           ghost_fmt,
+                    'cameras_avoided': result.get('cameras_avoided', 0),
+                    'extra_distance_m': int(extra_dist),
+                    'extra_duration_s': int(extra_dur),
+                }
+
+            self._send_json(out, 200)
+            return
 
         if self.path.startswith('/proxy/overpass'):
             self._proxy_post('https://overpass-api.de/api/interpreter', body, timeout=30)
@@ -574,6 +717,71 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        # ── GET /api/v1/health ────────────────────────────────────────────────
+        if self.path == '/api/v1/health':
+            self._send_json({
+                'status':         'ok',
+                'cameras_cached': _total_cached_cameras(),
+                'version':        VERSION,
+            })
+            return
+
+        # ── GET /api/v1/score ─────────────────────────────────────────────────
+        if self.path.startswith('/api/v1/score'):
+            if not self._check_rate():
+                return
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+
+            try:
+                lat      = float(params['lat'][0])
+                lon      = float(params['lon'][0])
+                radius_m = float(params.get('radius_m', ['1000'])[0])
+            except (KeyError, ValueError):
+                self._send_json({'error': 'Required: lat, lon (float). Optional: radius_m (default 1000)'}, 400)
+                return
+
+            # Convert radius to rough bbox
+            deg_lat = radius_m / 111320.0
+            deg_lon = radius_m / (111320.0 * math.cos(math.radians(lat)))
+            cameras = fetch_cameras_cached(
+                lat - deg_lat, lon - deg_lon,
+                lat + deg_lat, lon + deg_lon,
+            )
+
+            # Filter to actual radius
+            nearby = [
+                c for c in cameras
+                if haversine(lat, lon, c['lat'], c['lon']) <= radius_m
+            ]
+
+            area_km2 = math.pi * (radius_m / 1000.0) ** 2
+            density  = round(len(nearby) / area_km2, 2) if area_km2 > 0 else 0.0
+            # Privacy score: 100 at 0 cameras, drops linearly, floor 10
+            privacy_score = max(10, 100 - int(len(nearby) * 10))
+
+            cam_list = [
+                {
+                    'id':           c['id'],
+                    'lat':          c['lat'],
+                    'lon':          c['lon'],
+                    'manufacturer': c['tags'].get('manufacturer', c['tags'].get('brand', 'Unknown')),
+                    'operator':     c['tags'].get('operator', c['tags'].get('operator:short', 'Unknown')),
+                }
+                for c in nearby
+            ]
+
+            self._send_json({
+                'lat':                  lat,
+                'lon':                  lon,
+                'radius_m':             radius_m,
+                'camera_count':         len(nearby),
+                'surveillance_density': density,
+                'privacy_score':        privacy_score,
+                'cameras':              cam_list,
+            })
+            return
+
         # ── Ghost route endpoint ──────────────────────────────────────────────
         if self.path.startswith('/api/ghost-route'):
             parsed = urllib.parse.urlparse(self.path)
