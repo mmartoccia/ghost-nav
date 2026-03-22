@@ -681,6 +681,148 @@ html, body {
 #side-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 #side-panel::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
+/* ── Ghost Route UI ───────────────────────────────────── */
+
+/* Route card type variants */
+.route-card--fastest::before { background: #3b82f6; }
+.route-card--ghost::before   { background: #22c55e; }
+.route-card--alt::before     { background: #94a3b8; }
+
+.route-card--fastest.active { border-color: #3b82f6; background: rgba(59,130,246,0.08); }
+.route-card--ghost.active   { border-color: #22c55e; background: rgba(34,197,94,0.08); }
+.route-card--alt.active     { border-color: #94a3b8; background: rgba(148,163,184,0.06); }
+
+.route-card--fastest:hover { border-color: #3b82f6; }
+.route-card--ghost:hover   { border-color: #22c55e; }
+.route-card--alt:hover     { border-color: #94a3b8; }
+
+/* Type badge */
+.route-type-badge {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.route-type-badge--fastest { color: #3b82f6; }
+.route-type-badge--ghost   { color: #22c55e; }
+.route-type-badge--alt     { color: #94a3b8; }
+
+/* Camera savings */
+.cam-saved {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--accent-green);
+  margin-left: 4px;
+  opacity: 0.9;
+}
+
+.camera-stat.warn .stat-value { color: var(--accent-yellow); }
+
+/* Ghost preference toggle */
+.ghost-pref-row {
+  background: rgba(167, 139, 250, 0.06);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+}
+
+.ghost-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ghost-toggle-label input[type="checkbox"] {
+  accent-color: var(--accent-ghost);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ghost-toggle-text {
+  font-size: 12px;
+  color: var(--accent-ghost);
+  font-weight: 500;
+}
+
+/* Time warning banner */
+.ghost-time-warning {
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--accent-yellow);
+}
+
+/* No-cameras / unavailable notes */
+.ghost-no-cameras,
+.ghost-unavailable {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  border: 1px dashed;
+}
+
+.ghost-no-cameras {
+  border-color: rgba(34, 197, 94, 0.3);
+  color: var(--accent-green);
+  background: rgba(34, 197, 94, 0.05);
+}
+
+.ghost-unavailable {
+  border-color: rgba(148, 163, 184, 0.3);
+  color: var(--text-secondary);
+  background: rgba(148, 163, 184, 0.05);
+}
+
+/* Alternatives section */
+.alt-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.alt-toggle-btn {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 9px 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.alt-toggle-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-secondary);
+}
+
+.alt-chevron {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.alt-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alt-cards .route-card {
+  opacity: 0.85;
+}
+
 /* ── Responsive ───────────────────────────────────────── */
 @media (max-width: 768px) {
   #main {
