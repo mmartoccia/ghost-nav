@@ -3,16 +3,23 @@
  * app.js — All application logic
  *
  * Tech: Leaflet.js + OSRM demo server + OpenStreetMap Overpass API
+ *       Geocoding: Nominatim (free, no API key required)
  */
 
 'use strict';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const SUMMERVILLE = [33.0185, -80.1762];
-const OSRM_BASE   = 'https://router.project-osrm.org/route/v1/driving';
-const OVERPASS_URL= 'https://overpass-api.de/api/interpreter';
+const SUMMERVILLE        = [33.0185, -80.1762];
+const OSRM_BASE          = 'https://router.project-osrm.org/route/v1/driving';
+const OVERPASS_URL       = 'https://overpass-api.de/api/interpreter';
+const NOMINATIM_BASE     = 'https://nominatim.openstreetmap.org/search';
+const NOMINATIM_HEADERS  = {
+  'User-Agent': 'GhostNav/1.0 (privacy-navigation-research)',
+  'Accept-Language': 'en',
+};
 const CAMERA_PROXIMITY_M = 50; // meters
+const GEOCODE_DEBOUNCE   = 300; // ms
 
 const ROUTE_COLORS = {
   best:   { color: '#22c55e', weight: 5, opacity: 0.85 },
@@ -28,8 +35,9 @@ const ROUTE_BADGE_LABEL = ['Best', 'Mid', 'Worst'];
 let map;
 let startMarker   = null;
 let endMarker     = null;
-let clickState    = 'start'; // 'start' | 'end' | 'done'
-let cameras       = [];      // array of { lat, lon, tags }
+let startCoords   = null; // { lat, lng }
+let endCoords     = null; // { lat, lng }
+let cameras       = [];
 let cameraMarkers = [];
 let routeLayers   = [];
 let activeRouteIdx = null;
@@ -48,36 +56,215 @@ function initMap() {
     maxZoom: 19,
   }).addTo(map);
 
-  map.on('click', onMapClick);
   map.on('moveend zoomend', debounce(fetchCameras, 600));
 
-  // Initial camera fetch after a short delay (map tiles need to settle)
+  // Initial camera fetch after tiles settle
   setTimeout(fetchCameras, 800);
 }
 
-// ─── Click handling ───────────────────────────────────────────────────────────
+// ─── Geocoding (Nominatim) ────────────────────────────────────────────────────
 
-function onMapClick(e) {
-  const { lat, lng } = e.latlng;
+/**
+ * Search Nominatim for a query. Returns array of result objects.
+ */
+async function geocodeSearch(query) {
+  const params = new URLSearchParams({
+    q:             query,
+    format:        'json',
+    addressdetails: '1',
+    limit:         '5',
+    countrycodes:  'us',
+    viewbox:       '-80.5,32.7,-79.8,33.3',
+    bounded:       '0',
+  });
 
-  if (clickState === 'start') {
-    placeStartMarker(lat, lng);
-    clickState = 'end';
-    setHint('👆 Click to set <strong>end point</strong>');
-  } else if (clickState === 'end') {
-    placeEndMarker(lat, lng);
-    clickState = 'done';
-    setHint('⏳ Fetching routes…');
-    fetchRoutes();
-  }
-  // If 'done', clicking does nothing until Clear
+  const resp = await fetch(`${NOMINATIM_BASE}?${params}`, {
+    headers: NOMINATIM_HEADERS,
+  });
+
+  if (!resp.ok) throw new Error(`Nominatim HTTP ${resp.status}`);
+  return resp.json();
 }
+
+/**
+ * Format a Nominatim result into a human-readable label.
+ */
+function formatNominatimResult(result) {
+  // Build a short name: use display_name but trim it
+  const addr = result.address || {};
+
+  // Prefer: name > house_number + road > display_name short
+  let primary = result.name || result.display_name.split(',')[0].trim();
+  let secondary = [];
+
+  if (addr.road)         secondary.push(addr.road);
+  if (addr.city || addr.town || addr.village) {
+    secondary.push(addr.city || addr.town || addr.village);
+  }
+  if (addr.state)        secondary.push(addr.state);
+
+  // If primary is same as road, show house number too
+  if (addr.house_number && addr.road && primary === addr.road) {
+    primary = `${addr.house_number} ${addr.road}`;
+  }
+
+  return {
+    name:    primary,
+    address: secondary.filter(Boolean).join(', '),
+    lat:     parseFloat(result.lat),
+    lng:     parseFloat(result.lon),
+    display: result.display_name,
+  };
+}
+
+// ─── Search input setup ───────────────────────────────────────────────────────
+
+function setupSearchInput(inputId, dropdownId, onSelect) {
+  const input    = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+
+  let debounceTimer = null;
+  let currentResults = [];
+  let focusedIdx = -1;
+
+  function showDropdown(items) {
+    dropdown.innerHTML = '';
+    focusedIdx = -1;
+
+    if (!items) {
+      // Show searching state
+      dropdown.innerHTML = `
+        <div class="dropdown-searching">
+          <div class="mini-spinner"></div>
+          Searching…
+        </div>`;
+      dropdown.classList.remove('hidden');
+      return;
+    }
+
+    if (items.length === 0) {
+      dropdown.innerHTML = `<div class="dropdown-no-results">No results found</div>`;
+      dropdown.classList.remove('hidden');
+      return;
+    }
+
+    items.forEach((item, i) => {
+      const el = document.createElement('div');
+      el.className = 'dropdown-item';
+      el.innerHTML = `
+        <div class="dropdown-item-name">${escHtml(item.name)}</div>
+        ${item.address ? `<div class="dropdown-item-address">${escHtml(item.address)}</div>` : ''}
+      `;
+
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault(); // prevent blur before click
+        selectResult(item);
+      });
+
+      dropdown.appendChild(el);
+    });
+
+    dropdown.classList.remove('hidden');
+    currentResults = items;
+  }
+
+  function hideDropdown() {
+    dropdown.classList.add('hidden');
+    focusedIdx = -1;
+  }
+
+  function selectResult(item) {
+    // Set input value to formatted address
+    input.value = item.address
+      ? `${item.name}, ${item.address}`
+      : item.name;
+    input.classList.add('has-value');
+    hideDropdown();
+    onSelect(item);
+  }
+
+  function moveFocus(delta) {
+    const items = dropdown.querySelectorAll('.dropdown-item');
+    if (!items.length) return;
+
+    items[focusedIdx]?.classList.remove('focused');
+    focusedIdx = Math.max(0, Math.min(items.length - 1, focusedIdx + delta));
+    items[focusedIdx]?.classList.add('focused');
+  }
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    input.classList.remove('has-value');
+
+    if (!q) {
+      hideDropdown();
+      return;
+    }
+
+    // Show searching immediately
+    showDropdown(null);
+
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(async () => {
+      try {
+        const raw     = await geocodeSearch(q);
+        const results = raw.map(formatNominatimResult);
+        showDropdown(results);
+      } catch (err) {
+        console.warn('Geocode error:', err);
+        showDropdown([]);
+      }
+    }, GEOCODE_DEBOUNCE);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveFocus(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveFocus(-1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const items = dropdown.querySelectorAll('.dropdown-item');
+      if (focusedIdx >= 0 && items[focusedIdx]) {
+        selectResult(currentResults[focusedIdx]);
+      } else if (currentResults.length > 0) {
+        selectResult(currentResults[0]);
+      }
+    } else if (e.key === 'Escape') {
+      hideDropdown();
+    }
+  });
+
+  input.addEventListener('blur', () => {
+    // Delay to allow mousedown on dropdown item to fire first
+    setTimeout(hideDropdown, 150);
+  });
+
+  // Expose a reset function
+  return {
+    reset() {
+      input.value = '';
+      input.classList.remove('has-value');
+      hideDropdown();
+    },
+    setValue(text) {
+      input.value = text;
+      input.classList.add('has-value');
+      hideDropdown();
+    },
+  };
+}
+
+// ─── Marker placement ─────────────────────────────────────────────────────────
 
 function placeStartMarker(lat, lng) {
   if (startMarker) map.removeLayer(startMarker);
   startMarker = L.marker([lat, lng], { icon: pinIcon('#22c55e', 'S') })
     .addTo(map)
     .bindPopup('<div class="popup-title">🟢 Start</div>');
+  startCoords = { lat, lng };
 }
 
 function placeEndMarker(lat, lng) {
@@ -85,6 +272,7 @@ function placeEndMarker(lat, lng) {
   endMarker = L.marker([lat, lng], { icon: pinIcon('#ef4444', 'E') })
     .addTo(map)
     .bindPopup('<div class="popup-title">🔴 End</div>');
+  endCoords = { lat, lng };
 }
 
 // ─── Custom marker icons ──────────────────────────────────────────────────────
@@ -99,8 +287,8 @@ function pinIcon(color, letter) {
             font-size="10" font-weight="700" fill="white">${letter}</text>
     </svg>`;
   return L.divIcon({
-    html: svg,
-    className: '',
+    html:       svg,
+    className:  '',
     iconSize:   [28, 36],
     iconAnchor: [14, 36],
     popupAnchor:[0, -36],
@@ -108,7 +296,6 @@ function pinIcon(color, letter) {
 }
 
 function cameraIcon(direction) {
-  // Arrow direction: bearing in degrees (optional)
   const arrow = direction != null ? arrowSvg(direction) : '';
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
@@ -118,8 +305,8 @@ function cameraIcon(direction) {
       ${arrow}
     </svg>`;
   return L.divIcon({
-    html: svg,
-    className: '',
+    html:       svg,
+    className:  '',
     iconSize:   [20, 20],
     iconAnchor: [10, 10],
     popupAnchor:[0, -12],
@@ -127,11 +314,10 @@ function cameraIcon(direction) {
 }
 
 function arrowSvg(bearing) {
-  // Render small direction arrow around the camera dot
-  const rad   = (bearing - 90) * Math.PI / 180;
-  const r     = 13;
-  const x     = 10 + r * Math.cos(rad);
-  const y     = 10 + r * Math.sin(rad);
+  const rad = (bearing - 90) * Math.PI / 180;
+  const r   = 13;
+  const x   = 10 + r * Math.cos(rad);
+  const y   = 10 + r * Math.sin(rad);
   return `<line x1="10" y1="10" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"
                 stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>`;
 }
@@ -151,22 +337,19 @@ out body;`;
 
   try {
     const resp = await fetch(OVERPASS_URL, {
-      method: 'POST',
-      body:   'data=' + encodeURIComponent(query),
+      method:  'POST',
+      body:    'data=' + encodeURIComponent(query),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
     if (!resp.ok) throw new Error(`Overpass HTTP ${resp.status}`);
     const data = await resp.json();
-
     processCameras(data.elements || []);
   } catch (err) {
     console.warn('Overpass fetch failed:', err);
-    // Silently fail — cameras are best-effort
   }
 }
 
 function processCameras(elements) {
-  // Clear existing camera markers
   cameraMarkers.forEach(m => map.removeLayer(m));
   cameraMarkers = [];
 
@@ -182,11 +365,10 @@ function processCameras(elements) {
       .addTo(map)
       .on('click', () => showCameraDetail(cam));
 
-    // Popup content
-    const mfr  = cam.tags.manufacturer    || cam.tags.brand   || 'Unknown';
-    const op   = cam.tags.operator        || cam.tags['operator:short'] || 'Unknown';
-    const dir  = cam.tags.direction       || cam.tags['camera:direction'] || 'Unknown';
-    const model= cam.tags['camera:model'] || cam.tags.model   || '';
+    const mfr   = cam.tags.manufacturer    || cam.tags.brand                    || 'Unknown';
+    const op    = cam.tags.operator        || cam.tags['operator:short']         || 'Unknown';
+    const dir   = cam.tags.direction       || cam.tags['camera:direction']       || 'Unknown';
+    const model = cam.tags['camera:model'] || cam.tags.model                    || '';
 
     marker.bindPopup(`
       <div class="popup-title">📷 ALPR Camera</div>
@@ -199,7 +381,6 @@ function processCameras(elements) {
     cameraMarkers.push(marker);
   });
 
-  // Update badge
   const badge = document.getElementById('camera-count-badge');
   const num   = document.getElementById('camera-count-num');
   num.textContent = cameras.length;
@@ -208,7 +389,6 @@ function processCameras(elements) {
 
 function parseBearing(val) {
   if (!val) return null;
-  // Support compass headings: N=0, NE=45, E=90, …
   const compass = { N:0, NNE:22.5, NE:45, ENE:67.5, E:90, ESE:112.5, SE:135,
     SSE:157.5, S:180, SSW:202.5, SW:225, WSW:247.5, W:270, WNW:292.5, NW:315, NNW:337.5 };
   const upper = String(val).trim().toUpperCase();
@@ -221,9 +401,10 @@ function parseBearing(val) {
 
 async function fetchRoutes() {
   showPanel('loading');
+  setHint('⏳ Fetching routes…');
 
-  const s = startMarker.getLatLng();
-  const e = endMarker.getLatLng();
+  const s = startCoords;
+  const e = endCoords;
 
   const url = `${OSRM_BASE}/${s.lng},${s.lat};${e.lng},${e.lat}` +
               `?overview=full&geometries=geojson&alternatives=3`;
@@ -245,38 +426,30 @@ async function fetchRoutes() {
 }
 
 function processRoutes(routes) {
-  // Clear old route layers
   clearRouteLayers();
 
-  // Score each route by camera exposure
   const scored = routes.map((route, idx) => {
-    const coords     = route.geometry.coordinates; // [[lon, lat], ...]
+    const coords     = route.geometry.coordinates;
     const cameraHits = countCamerasNearRoute(coords);
-    const duration   = route.duration; // seconds
-    const distance   = route.distance; // meters
-
+    const duration   = route.duration;
+    const distance   = route.distance;
     return { idx, route, coords, cameraHits, duration, distance };
   });
 
-  // Sort by camera count (asc) then duration (asc)
   scored.sort((a, b) => a.cameraHits - b.cameraHits || a.duration - b.duration);
 
-  // Assign ranks: best=0, middle=1, worst=2
   const ranked = scored.map((item, rank) => ({ ...item, rank }));
 
-  // Draw routes (draw worst first so best is on top)
+  // Draw worst first so best appears on top
   const drawOrder = [...ranked].sort((a, b) => b.rank - a.rank);
   drawOrder.forEach(item => drawRoute(item));
 
-  // Render side panel
   renderRoutePanel(ranked);
   showPanel('results');
   setHint('✅ Routes calculated — click a route to highlight');
-  clickState = 'done';
 }
 
 function countCamerasNearRoute(coords) {
-  // coords: [[lon, lat], ...]
   if (!cameras.length) return 0;
   let count = 0;
   for (const cam of cameras) {
@@ -289,7 +462,6 @@ function isCameraOnRoute(cam, coords) {
   for (let i = 0; i < coords.length - 1; i++) {
     const [lon1, lat1] = coords[i];
     const [lon2, lat2] = coords[i + 1];
-    // Check camera proximity to segment
     const d = pointToSegmentDistance(cam.lat, cam.lon, lat1, lon1, lat2, lon2);
     if (d <= CAMERA_PROXIMITY_M) return true;
   }
@@ -298,11 +470,8 @@ function isCameraOnRoute(cam, coords) {
 
 // ─── Geometry helpers ─────────────────────────────────────────────────────────
 
-/**
- * Haversine distance between two lat/lon points (meters)
- */
 function haversine(lat1, lon1, lat2, lon2) {
-  const R  = 6371000; // Earth radius in meters
+  const R    = 6371000;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const a = Math.sin(dLat/2)**2 +
@@ -312,14 +481,9 @@ function haversine(lat1, lon1, lat2, lon2) {
 
 function toRad(deg) { return deg * Math.PI / 180; }
 
-/**
- * Minimum distance from point P to line segment AB (all in lat/lon, result in meters)
- * Uses planar approximation valid for short segments.
- */
 function pointToSegmentDistance(pLat, pLon, aLat, aLon, bLat, bLon) {
-  // Convert to approximate meters using equirectangular
-  const latScale  = 111320;
-  const lonScale  = 111320 * Math.cos(toRad((aLat + bLat) / 2));
+  const latScale = 111320;
+  const lonScale = 111320 * Math.cos(toRad((aLat + bLat) / 2));
 
   const px = (pLon - aLon) * lonScale;
   const py = (pLat - aLat) * latScale;
@@ -329,7 +493,7 @@ function pointToSegmentDistance(pLat, pLon, aLat, aLon, bLat, bLon) {
   const lenSq = dx*dx + dy*dy;
   if (lenSq === 0) return Math.hypot(px, py);
 
-  const t = Math.max(0, Math.min(1, (px*dx + py*dy) / lenSq));
+  const t    = Math.max(0, Math.min(1, (px*dx + py*dy) / lenSq));
   const nearX = t * dx;
   const nearY = t * dy;
   return Math.hypot(px - nearX, py - nearY);
@@ -338,11 +502,10 @@ function pointToSegmentDistance(pLat, pLon, aLat, aLon, bLat, bLon) {
 // ─── Route drawing ────────────────────────────────────────────────────────────
 
 function drawRoute(item) {
-  const { idx, rank, coords, route } = item;
+  const { idx, rank, coords } = item;
   const rankKey = ROUTE_RANK_LABEL[rank] || 'worst';
   const style   = ROUTE_COLORS[rankKey];
 
-  // Convert [lon, lat] → [lat, lon] for Leaflet
   const latlngs = coords.map(([lon, lat]) => [lat, lon]);
 
   const layer = L.polyline(latlngs, {
@@ -354,7 +517,6 @@ function drawRoute(item) {
   }).addTo(map);
 
   layer.on('click', () => activateRoute(idx));
-
   routeLayers.push({ idx, layer, rank, rankKey });
 }
 
@@ -371,7 +533,6 @@ function activateRoute(idx) {
     }
   });
 
-  // Highlight card
   document.querySelectorAll('.route-card').forEach(card => {
     card.classList.toggle('active', parseInt(card.dataset.idx) === idx);
   });
@@ -397,7 +558,7 @@ function renderRoutePanel(ranked) {
     const km        = (distance / 1000).toFixed(1);
 
     const card = document.createElement('div');
-    card.className  = `route-card ${rankKey}`;
+    card.className   = `route-card ${rankKey}`;
     card.dataset.idx = idx;
 
     card.innerHTML = `
@@ -432,11 +593,11 @@ function renderRoutePanel(ranked) {
 
 function privacyEmoji(hits, ranked) {
   const max = Math.max(...ranked.map(r => r.cameraHits));
-  if (hits === 0)         return '🟢';
-  if (max === 0)          return '🟢';
+  if (hits === 0)       return '🟢';
+  if (max === 0)        return '🟢';
   const ratio = hits / max;
-  if (ratio <= 0.33)      return '🟢';
-  if (ratio <= 0.66)      return '🟡';
+  if (ratio <= 0.33)    return '🟢';
+  if (ratio <= 0.66)    return '🟡';
   return '🔴';
 }
 
@@ -465,12 +626,6 @@ function showCameraDetail(cam) {
 
   document.getElementById('camera-detail-panel').classList.remove('hidden');
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('close-camera-detail').addEventListener('click', () => {
-    document.getElementById('camera-detail-panel').classList.add('hidden');
-  });
-});
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 
@@ -511,20 +666,109 @@ function debounce(fn, ms) {
 function clearAll() {
   if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
   if (endMarker)   { map.removeLayer(endMarker);   endMarker   = null; }
+  startCoords = null;
+  endCoords   = null;
+
   clearRouteLayers();
-  clickState = 'start';
   showPanel('idle');
-  setHint('👆 Click to set <strong>start point</strong>');
+  setHint('Enter start and destination to compare routes');
   document.getElementById('camera-detail-panel').classList.add('hidden');
+
+  startInputCtrl.reset();
+  endInputCtrl.reset();
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
+let startInputCtrl;
+let endInputCtrl;
+
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
 
+  // Wire up search inputs
+  startInputCtrl = setupSearchInput('start-input', 'start-dropdown', (item) => {
+    placeStartMarker(item.lat, item.lng);
+    map.setView([item.lat, item.lng], Math.max(map.getZoom(), 14));
+    maybeCalculateRoutes();
+  });
+
+  endInputCtrl = setupSearchInput('end-input', 'end-dropdown', (item) => {
+    placeEndMarker(item.lat, item.lng);
+    map.setView([item.lat, item.lng], Math.max(map.getZoom(), 14));
+    maybeCalculateRoutes();
+  });
+
+  // Swap button
+  document.getElementById('swap-btn').addEventListener('click', () => {
+    if (!startCoords && !endCoords) return;
+
+    const tempCoords  = startCoords;
+    const tempMarker  = startMarker;
+    const tempVal     = document.getElementById('start-input').value;
+
+    // Swap coords
+    startCoords = endCoords;
+    endCoords   = tempCoords;
+
+    // Swap marker layers
+    startMarker = endMarker;
+    endMarker   = tempMarker;
+
+    // Update marker icons
+    if (startMarker) {
+      const latlng = startMarker.getLatLng();
+      map.removeLayer(startMarker);
+      startMarker = L.marker(latlng, { icon: pinIcon('#22c55e', 'S') })
+        .addTo(map)
+        .bindPopup('<div class="popup-title">🟢 Start</div>');
+    }
+    if (endMarker) {
+      const latlng = endMarker.getLatLng();
+      map.removeLayer(endMarker);
+      endMarker = L.marker(latlng, { icon: pinIcon('#ef4444', 'E') })
+        .addTo(map)
+        .bindPopup('<div class="popup-title">🔴 End</div>');
+    }
+
+    // Swap input text values
+    const endVal = document.getElementById('end-input').value;
+    document.getElementById('start-input').value = endVal;
+    document.getElementById('end-input').value   = tempVal;
+
+    // Sync has-value class
+    document.getElementById('start-input').classList.toggle('has-value', !!endVal);
+    document.getElementById('end-input').classList.toggle('has-value', !!tempVal);
+
+    // Recalculate if both set
+    if (startCoords && endCoords) {
+      clearRouteLayers();
+      fetchRoutes();
+    }
+  });
+
+  // Clear button
   document.getElementById('clear-btn').addEventListener('click', clearAll);
 
-  // Fit map to window on resize
+  // Camera detail close
+  document.getElementById('close-camera-detail').addEventListener('click', () => {
+    document.getElementById('camera-detail-panel').classList.add('hidden');
+  });
+
+  // Fit map on resize
   window.addEventListener('resize', () => map.invalidateSize());
 });
+
+/**
+ * If both start and end are set, auto-calculate routes.
+ */
+function maybeCalculateRoutes() {
+  if (startCoords && endCoords) {
+    clearRouteLayers();
+    fetchRoutes();
+  } else {
+    setHint(startCoords
+      ? 'Now enter your destination'
+      : 'Enter your start location');
+  }
+}
