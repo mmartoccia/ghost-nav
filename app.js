@@ -14,10 +14,7 @@ const SUMMERVILLE        = [33.0185, -80.1762];
 const OSRM_BASE          = 'https://router.project-osrm.org/route/v1/driving';
 const OVERPASS_URL       = 'https://overpass-api.de/api/interpreter';
 const NOMINATIM_BASE     = 'https://nominatim.openstreetmap.org/search';
-const NOMINATIM_HEADERS  = {
-  'User-Agent': 'GhostNav/1.0 (privacy-navigation-research)',
-  'Accept-Language': 'en',
-};
+// NOTE: No custom headers — browser fetch with User-Agent triggers CORS preflight that Nominatim rejects
 const CAMERA_PROXIMITY_M = 50; // meters
 const GEOCODE_DEBOUNCE   = 300; // ms
 
@@ -66,24 +63,25 @@ function initMap() {
 
 /**
  * Search Nominatim for a query. Returns array of result objects.
+ * NOTE: No custom headers — browser User-Agent triggers CORS preflight which Nominatim rejects.
  */
 async function geocodeSearch(query) {
   const params = new URLSearchParams({
-    q:             query,
-    format:        'json',
+    q:              query,
+    format:         'json',
     addressdetails: '1',
-    limit:         '5',
-    countrycodes:  'us',
-    viewbox:       '-80.5,32.7,-79.8,33.3',
-    bounded:       '0',
+    limit:          '5',
+    countrycodes:   'us',
   });
 
-  const resp = await fetch(`${NOMINATIM_BASE}?${params}`, {
-    headers: NOMINATIM_HEADERS,
-  });
+  const url = `${NOMINATIM_BASE}?${params.toString()}`;
+  console.log('[Geocode] Fetching:', url);
 
+  const resp = await fetch(url);
   if (!resp.ok) throw new Error(`Nominatim HTTP ${resp.status}`);
-  return resp.json();
+  const results = await resp.json();
+  console.log('[Geocode] Results:', results.length, results);
+  return results;
 }
 
 /**
@@ -205,13 +203,16 @@ function setupSearchInput(inputId, dropdownId, onSelect) {
     showDropdown(null);
 
     clearTimeout(debounceTimer);
+    console.log('[Search] Debounce queued for:', q);
     debounceTimer = setTimeout(async () => {
+      console.log('[Search] Debounce fired, querying:', q);
       try {
         const raw     = await geocodeSearch(q);
         const results = raw.map(formatNominatimResult);
+        console.log('[Search] Formatted results:', results.length);
         showDropdown(results);
       } catch (err) {
-        console.warn('Geocode error:', err);
+        console.warn('[Search] Geocode error:', err);
         showDropdown([]);
       }
     }, GEOCODE_DEBOUNCE);
@@ -410,9 +411,11 @@ async function fetchRoutes() {
               `?overview=full&geometries=geojson&alternatives=3`;
 
   try {
+    console.log('[OSRM] Fetching routes:', url);
     const resp = await fetch(url);
     if (!resp.ok) throw new Error(`OSRM HTTP ${resp.status}`);
     const data = await resp.json();
+    console.log('[OSRM] Response received:', data.code, 'routes:', data.routes?.length);
 
     if (data.code !== 'Ok' || !data.routes?.length) {
       throw new Error(data.message || 'No routes returned');
@@ -420,7 +423,7 @@ async function fetchRoutes() {
 
     processRoutes(data.routes);
   } catch (err) {
-    console.error('OSRM error:', err);
+    console.error('[OSRM] Error:', err);
     showError('Could not fetch routes. Check your connection or try different points.');
   }
 }
@@ -428,8 +431,11 @@ async function fetchRoutes() {
 function processRoutes(routes) {
   clearRouteLayers();
 
+  console.log('[Routes] Processing', routes.length, 'routes');
+
   const scored = routes.map((route, idx) => {
     const coords     = route.geometry.coordinates;
+    console.log('[Routes] Route', idx, '— coord count:', coords.length, 'first coord:', coords[0]);
     const cameraHits = countCamerasNearRoute(coords);
     const duration   = route.duration;
     const distance   = route.distance;
@@ -443,6 +449,15 @@ function processRoutes(routes) {
   // Draw worst first so best appears on top
   const drawOrder = [...ranked].sort((a, b) => b.rank - a.rank);
   drawOrder.forEach(item => drawRoute(item));
+
+  console.log('[Routes] Route layer count:', routeLayers.length);
+
+  // Fit map to show all routes
+  if (routeLayers.length > 0) {
+    const group = L.featureGroup(routeLayers.map(r => r.layer));
+    map.fitBounds(group.getBounds(), { padding: [40, 40] });
+    console.log('[Routes] Map fitted to route bounds');
+  }
 
   renderRoutePanel(ranked);
   showPanel('results');
@@ -506,7 +521,10 @@ function drawRoute(item) {
   const rankKey = ROUTE_RANK_LABEL[rank] || 'worst';
   const style   = ROUTE_COLORS[rankKey];
 
+  // OSRM returns [lng, lat] — Leaflet polyline needs [lat, lng]
   const latlngs = coords.map(([lon, lat]) => [lat, lon]);
+
+  console.log('[Routes] Adding route', idx, 'to map —', latlngs.length, 'points, color:', style.color);
 
   const layer = L.polyline(latlngs, {
     color:   style.color,
@@ -516,6 +534,7 @@ function drawRoute(item) {
     lineCap: 'round',
   }).addTo(map);
 
+  console.log('[Routes] Route', idx, 'layer added to map');
   layer.on('click', () => activateRoute(idx));
   routeLayers.push({ idx, layer, rank, rankKey });
 }
