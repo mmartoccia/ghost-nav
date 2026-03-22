@@ -66,7 +66,8 @@ function initMap() {
  * NOTE: No custom headers — browser User-Agent triggers CORS preflight which Nominatim rejects.
  */
 async function geocodeSearch(query) {
-  const params = new URLSearchParams({
+  // Try Nominatim first (good for place names, businesses)
+  const nominatimParams = new URLSearchParams({
     q:              query,
     format:         'json',
     addressdetails: '1',
@@ -74,14 +75,54 @@ async function geocodeSearch(query) {
     countrycodes:   'us',
   });
 
-  const url = `${NOMINATIM_BASE}?${params.toString()}`;
-  console.log('[Geocode] Fetching:', url);
+  const nominatimUrl = `${NOMINATIM_BASE}?${nominatimParams.toString()}`;
+  console.log('[Geocode] Nominatim:', nominatimUrl);
 
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Nominatim HTTP ${resp.status}`);
-  const results = await resp.json();
-  console.log('[Geocode] Results:', results.length, results);
-  return results;
+  try {
+    const resp = await fetch(nominatimUrl);
+    if (resp.ok) {
+      const results = await resp.json();
+      console.log('[Geocode] Nominatim results:', results.length);
+      if (results.length > 0) return results;
+    }
+  } catch (err) {
+    console.warn('[Geocode] Nominatim failed:', err);
+  }
+
+  // Fallback: US Census geocoder (has every US address, even new developments)
+  console.log('[Geocode] Trying Census fallback for:', query);
+  const censusParams = new URLSearchParams({
+    address:   query,
+    benchmark: 'Public_AR_Current',
+    format:    'json',
+  });
+
+  try {
+    const resp = await fetch(`/proxy/census?${censusParams.toString()}`);
+    if (resp.ok) {
+      const data = await resp.json();
+      const matches = data?.result?.addressMatches || [];
+      console.log('[Geocode] Census results:', matches.length);
+      // Convert Census format to Nominatim-compatible format
+      return matches.map(m => ({
+        display_name: m.matchedAddress,
+        lat: String(m.coordinates.y),
+        lon: String(m.coordinates.x),
+        address: {
+          road: m.addressComponents?.streetName || '',
+          house_number: m.addressComponents?.fromAddress || '',
+          city: m.addressComponents?.city || '',
+          state: m.addressComponents?.state || '',
+          postcode: m.addressComponents?.zip || '',
+        },
+        type: 'census',
+      }));
+    }
+  } catch (err) {
+    console.warn('[Geocode] Census failed:', err);
+  }
+
+  return [];
 }
 
 /**
