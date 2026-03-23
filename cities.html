@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Most Surveilled US Cities 2026 | Ghost Nav City Rankings</title>
+  <meta name="description" content="Which US cities have the most surveillance cameras? Ghost Nav ranks the top 25 US cities by ALPR camera density. See which cities are most — and least — surveilled." />
+  <meta name="keywords" content="most surveilled cities, US city surveillance ranking, ALPR cameras by city, surveillance cameras 2026, least surveilled cities, privacy score cities" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://ghost-nav.app/cities" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Most Surveilled US Cities 2026 | Ghost Nav" />
+  <meta property="og:description" content="Ghost Nav ranks 25 US cities by ALPR surveillance camera density. See where your privacy is most at risk." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://ghost-nav.app/cities" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Most Surveilled US Cities 2026 | Ghost Nav" />
+  <meta name="twitter:description" content="Which US city has the most surveillance cameras? Ghost Nav data ranks 25 cities by ALPR density." />
+
+  <!-- Schema.org Dataset markup -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Dataset",
+    "name": "US City Surveillance Camera Rankings 2026",
+    "description": "Ranking of 25 major US cities by ALPR and surveillance camera density (cameras per square kilometer), sourced from OpenStreetMap Overpass API.",
+    "url": "https://ghost-nav.app/cities",
+    "creator": {
+      "@type": "Organization",
+      "name": "Ghost Nav",
+      "url": "https://ghost-nav.app"
+    },
+    "license": "https://creativecommons.org/licenses/by/4.0/",
+    "temporalCoverage": "2026",
+    "spatialCoverage": {
+      "@type": "Place",
+      "name": "United States"
+    },
+    "variableMeasured": [
+      {
+        "@type": "PropertyValue",
+        "name": "cameras_per_sqkm",
+        "description": "Number of surveillance/ALPR cameras per square kilometer"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "total_cameras",
+        "description": "Total surveillance camera nodes in city bounding box"
+      }
+    ]
+  }
+  </script>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#22c55e">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+
+  <style>
+    :root {
+      --bg:        #0a0a0a;
+      --bg2:       #111111;
+      --bg3:       #1a1a1a;
+      --border:    #2a2a2a;
+      --green:     #22c55e;
+      --green-dim: #16a34a;
+      --red:       #ef4444;
+      --amber:     #f59e0b;
+      --text:      #e5e7eb;
+      --text-muted:#6b7280;
+      --font:      'Courier New', Courier, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    .brand .ghost-emoji { font-size: 22px; }
+    .brand .brand-name  { font-size: 18px; font-weight: bold; color: var(--green); }
+    .brand .brand-tag   { font-size: 11px; color: var(--text-muted); display: none; }
+
+    @media(min-width:480px){ .brand .brand-tag { display: inline; } }
+
+    .header-nav {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .btn:hover { border-color: var(--green); color: var(--green); }
+    .btn.active { border-color: var(--green); color: var(--green); }
+
+    /* ── Page ── */
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 16px 64px;
+    }
+
+    .page-hero {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .page-hero h1 {
+      font-size: clamp(22px, 4vw, 36px);
+      color: var(--green);
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .page-hero .subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      max-width: 600px;
+      margin: 0 auto 16px;
+      line-height: 1.6;
+    }
+
+    .meta-bar {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+    }
+
+    .meta-bar span { display: flex; align-items: center; gap: 4px; }
+
+    /* ── Grade legend ── */
+    .grade-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 32px;
+    }
+
+    .grade-pill {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      border: 1px solid currentColor;
+    }
+
+    .grade-A { color: #22c55e; }
+    .grade-B { color: #84cc16; }
+    .grade-C { color: #f59e0b; }
+    .grade-D { color: #f97316; }
+    .grade-F { color: #ef4444; }
+
+    /* ── Section ── */
+    .section {
+      margin-bottom: 48px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    .section-title.danger { color: var(--red); }
+    .section-title.safe   { color: var(--green); }
+
+    .section-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th {
+      background: var(--bg3);
+      color: var(--text-muted);
+      font-weight: normal;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+
+    tr:hover td { background: var(--bg2); }
+
+    .rank-cell {
+      color: var(--text-muted);
+      font-size: 12px;
+      width: 40px;
+    }
+
+    .city-cell {
+      font-weight: bold;
+    }
+
+    .city-state {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: 6px;
+    }
+
+    .density-cell {
+      font-variant-numeric: tabular-nums;
+      color: var(--green);
+    }
+
+    .cameras-cell {
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted);
+    }
+
+    .grade-badge {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      line-height: 28px;
+      text-align: center;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 14px;
+      border: 1px solid currentColor;
+    }
+
+    .route-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--green);
+      font-family: var(--font);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .route-btn:hover {
+      background: rgba(34,197,94,0.1);
+      border-color: var(--green);
+    }
+
+    /* ── Full ranking ── */
+    .full-toggle {
+      text-align: center;
+      margin: 8px 0 32px;
+    }
+
+    .full-toggle button {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 12px;
+      padding: 8px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .full-toggle button:hover {
+      color: var(--green);
+      border-color: var(--green);
+    }
+
+    /* ── Methodology ── */
+    .methodology {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 24px;
+      font-size: 13px;
+      line-height: 1.7;
+      margin-top: 40px;
+    }
+
+    .methodology h2 {
+      color: var(--green);
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+
+    .methodology p { color: var(--text-muted); margin-bottom: 10px; }
+    .methodology p:last-child { margin-bottom: 0; }
+
+    .methodology a { color: var(--green); }
+
+    /* ── Loading / error ── */
+    #loading-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hidden { display: none !important; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 32px 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--green); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════ HEADER ══════════════════ -->
+<header>
+  <a href="/index.html" class="brand">
+    <span class="ghost-emoji">👻</span>
+    <span class="brand-name">Ghost</span>
+    <span class="brand-tag">privacy-aware navigation</span>
+  </a>
+  <nav class="header-nav">
+    <a href="/leaderboard.html" class="btn">🏆 Leaderboard</a>
+    <a href="/cities.html"      class="btn active">🏙️ City Rankings</a>
+    <a href="/index.html"       class="btn">🗺️ Navigate</a>
+  </nav>
+</header>
+
+<!-- ══════════════════ MAIN ══════════════════ -->
+<main>
+
+  <!-- Loading state -->
+  <div id="loading-state">
+    <span class="spinner"></span>Loading city surveillance data…
+  </div>
+
+  <!-- Content (hidden until data loads) -->
+  <div id="content" class="hidden">
+
+    <div class="page-hero">
+      <h1>🏙️ US City Surveillance Rankings 2026</h1>
+      <p class="subtitle">
+        Ghost Nav analyzes ALPR and surveillance camera density across 25 major US cities
+        using OpenStreetMap data. Cities are ranked by cameras per square kilometer.
+      </p>
+      <div class="meta-bar">
+        <span>📡 Source: OpenStreetMap / Overpass API</span>
+        <span>🗓️ Updated: <span id="update-date">—</span></span>
+        <span>🏙️ 25 cities ranked</span>
+      </div>
+    </div>
+
+    <!-- Grade Legend -->
+    <div class="grade-legend">
+      <span class="grade-pill grade-A">A — &lt;0.1/km² (Low)</span>
+      <span class="grade-pill grade-B">B — 0.1–0.5/km² (Moderate)</span>
+      <span class="grade-pill grade-C">C — 0.5–1.0/km² (High)</span>
+      <span class="grade-pill grade-D">D — 1.0–2.0/km² (Very High)</span>
+      <span class="grade-pill grade-F">F — &gt;2.0/km² (Extreme)</span>
+    </div>
+
+    <!-- ── Most Surveilled ── -->
+    <section class="section" aria-label="Most surveilled cities">
+      <div class="section-header">
+        <h2 class="section-title danger">🔴 Most Surveilled Cities</h2>
+        <span class="section-desc">Top 10 by camera density</span>
+      </div>
+      <div class="table-wrap">
+        <table id="most-table" aria-label="Most surveilled US cities ranked by camera density">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>City</th>
+              <th>Cameras/km²</th>
+              <th>Total Cameras</th>
+              <th>Privacy Grade</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="most-tbody">
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── Full ranking toggle ── -->
+    <div class="full-toggle">
+      <button id="full-toggle-btn" onclick="toggleFull()">📋 Show All 25 Cities</button>
+    </div>
+
+    <!-- ── Full ranking (hidden by default) ── -->
+    <section class="section hidden" id="full-section" aria-label="Full city rankings">
+      <div class="section-header">
+        <h2 class="section-title">📋 All 25 Cities</h2>
+        <span class="section-desc">Complete ranking by camera density</span>
+      </div>
+      <div class="table-wrap">
+        <table id="full-table" aria-label="All 25 US cities ranked by surveillance camera density">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>City</th>
+              <th>Cameras/km²</th>
+              <th>Total Cameras</th>
+              <th>Privacy Grade</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="full-tbody">
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── Least Surveilled ── -->
+    <section class="section" aria-label="Least surveilled cities">
+      <div class="section-header">
+        <h2 class="section-title safe">🟢 Least Surveilled Cities</h2>
+        <span class="section-desc">Bottom 10 by camera density</span>
+      </div>
+      <div class="table-wrap">
+        <table id="least-table" aria-label="Least surveilled US cities ranked by camera density">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>City</th>
+              <th>Cameras/km²</th>
+              <th>Total Cameras</th>
+              <th>Privacy Grade</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="least-tbody">
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Methodology -->
+    <div class="methodology">
+      <h2>📖 Methodology</h2>
+      <p>
+        Camera counts are queried from <a href="https://www.openstreetmap.org" rel="noopener" target="_blank">OpenStreetMap</a>
+        via the Overpass API. We query for nodes tagged <code>surveillance:type=ALPR</code> (automated license plate readers)
+        and <code>man_made=surveillance</code> within each city's bounding box.
+      </p>
+      <p>
+        <strong>Density</strong> is calculated as total cameras ÷ bounding box area (km²).
+        Cities with larger footprints naturally have lower densities even if they have more cameras.
+        The bounding boxes are conservative approximations of each city's metropolitan area.
+      </p>
+      <p>
+        <strong>Limitations:</strong> OSM coverage varies significantly by city — denser mapping communities
+        may show higher counts. Zero values indicate either very low coverage or API rate-limit failures
+        at query time. This data is for informational and research purposes only.
+      </p>
+      <p>
+        Data source: <a href="https://overpass-api.de" rel="noopener" target="_blank">overpass-api.de</a>
+        · License: <a href="https://www.openstreetmap.org/copyright" rel="noopener" target="_blank">ODbL</a>
+        · Ghost Nav is open-source privacy navigation software.
+      </p>
+    </div>
+
+  </div><!-- /content -->
+</main>
+
+<footer>
+  <p>
+    Ghost Nav — <a href="/index.html">Privacy-aware navigation</a> ·
+    Data from <a href="https://www.openstreetmap.org" rel="noopener" target="_blank">OpenStreetMap</a> ·
+    <a href="/cities.html">City Rankings</a> · <a href="/leaderboard.html">Leaderboard</a>
+  </p>
+</footer>
+
+<script>
+  function getGrade(density) {
+    if (density < 0.1)  return { letter: 'A', cls: 'grade-A' };
+    if (density < 0.5)  return { letter: 'B', cls: 'grade-B' };
+    if (density < 1.0)  return { letter: 'C', cls: 'grade-C' };
+    if (density < 2.0)  return { letter: 'D', cls: 'grade-D' };
+    return               { letter: 'F', cls: 'grade-F' };
+  }
+
+  function buildRow(city, displayRank) {
+    const grade = getGrade(city.cameras_per_sqkm);
+    const density = city.cameras_per_sqkm === 0
+      ? '<span style="color:var(--text-muted)">N/A</span>'
+      : `<span class="${grade.cls}">${city.cameras_per_sqkm.toFixed(4)}</span>`;
+    const cameras = city.total_cameras === 0
+      ? '<span style="color:var(--text-muted)">—</span>'
+      : city.total_cameras.toLocaleString();
+
+    return `<tr>
+      <td class="rank-cell">#${displayRank ?? city.rank}</td>
+      <td class="city-cell">${city.city}<span class="city-state">${city.state}</span></td>
+      <td class="density-cell">${density}</td>
+      <td class="cameras-cell">${cameras}</td>
+      <td><span class="grade-badge ${grade.cls}">${grade.letter}</span></td>
+      <td><a href="/index.html?city=${encodeURIComponent(city.city)}" class="route-btn">🗺️ Route</a></td>
+    </tr>`;
+  }
+
+  let allCities = [];
+  let fullVisible = false;
+
+  function toggleFull() {
+    fullVisible = !fullVisible;
+    const sec = document.getElementById('full-section');
+    const btn = document.getElementById('full-toggle-btn');
+    if (fullVisible) {
+      sec.classList.remove('hidden');
+      btn.textContent = '▲ Hide Full Ranking';
+    } else {
+      sec.classList.add('hidden');
+      btn.textContent = '📋 Show All 25 Cities';
+    }
+  }
+
+  async function loadData() {
+    try {
+      const res = await fetch('data/city-rankings.json');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      allCities = data.cities || [];
+
+      // Update date
+      if (data.generated_at) {
+        const d = new Date(data.generated_at);
+        document.getElementById('update-date').textContent = d.toLocaleDateString('en-US', {
+          year: 'numeric', month: 'long', day: 'numeric'
+        });
+      }
+
+      // Most surveilled: top 10
+      const top10 = allCities.slice(0, 10);
+      document.getElementById('most-tbody').innerHTML = top10.map((c, i) => buildRow(c, i+1)).join('');
+
+      // Least surveilled: bottom 10 (show in ascending order = least first)
+      const bottom10 = allCities.slice(-10).reverse();
+      document.getElementById('least-tbody').innerHTML = bottom10.map((c, i) => buildRow(c, allCities.length - i)).join('');
+
+      // Full ranking
+      document.getElementById('full-tbody').innerHTML = allCities.map((c, i) => buildRow(c, i+1)).join('');
+
+      // Show content
+      document.getElementById('loading-state').classList.add('hidden');
+      document.getElementById('content').classList.remove('hidden');
+
+    } catch (err) {
+      document.getElementById('loading-state').innerHTML =
+        `<span style="color:var(--red)">⚠️ Failed to load data: ${err.message}</span>`;
+    }
+  }
+
+  loadData();
+</script>
+</body>
+</html>

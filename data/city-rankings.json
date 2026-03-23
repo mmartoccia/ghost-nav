@@ -1,0 +1,206 @@
+{
+  "generated_at": "2026-03-23T18:10:08Z",
+  "source": "OpenStreetMap Overpass API",
+  "cities": [
+    {
+      "city": "Detroit",
+      "state": "MI",
+      "total_cameras": 863,
+      "bbox_area_sqkm": 673.25,
+      "cameras_per_sqkm": 1.281846,
+      "rank": 1
+    },
+    {
+      "city": "Atlanta",
+      "state": "GA",
+      "total_cameras": 631,
+      "bbox_area_sqkm": 652.95,
+      "cameras_per_sqkm": 0.96639,
+      "rank": 2
+    },
+    {
+      "city": "New York City",
+      "state": "NY",
+      "total_cameras": 1573,
+      "bbox_area_sqkm": 2310.88,
+      "cameras_per_sqkm": 0.680694,
+      "rank": 3
+    },
+    {
+      "city": "Indianapolis",
+      "state": "IN",
+      "total_cameras": 513,
+      "bbox_area_sqkm": 1082.47,
+      "cameras_per_sqkm": 0.473915,
+      "rank": 4
+    },
+    {
+      "city": "Albuquerque",
+      "state": "NM",
+      "total_cameras": 430,
+      "bbox_area_sqkm": 1226.25,
+      "cameras_per_sqkm": 0.350663,
+      "rank": 5
+    },
+    {
+      "city": "Phoenix",
+      "state": "AZ",
+      "total_cameras": 453,
+      "bbox_area_sqkm": 2587.91,
+      "cameras_per_sqkm": 0.175045,
+      "rank": 6
+    },
+    {
+      "city": "Los Angeles",
+      "state": "CA",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 3340.6,
+      "cameras_per_sqkm": 0,
+      "rank": 7
+    },
+    {
+      "city": "Chicago",
+      "state": "IL",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 1455.75,
+      "cameras_per_sqkm": 0,
+      "rank": 8
+    },
+    {
+      "city": "Houston",
+      "state": "TX",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 4884.91,
+      "cameras_per_sqkm": 0,
+      "rank": 9
+    },
+    {
+      "city": "Washington DC",
+      "state": "DC",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 413.19,
+      "cameras_per_sqkm": 0,
+      "rank": 10
+    },
+    {
+      "city": "Miami",
+      "state": "FL",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 288.69,
+      "cameras_per_sqkm": 0,
+      "rank": 11
+    },
+    {
+      "city": "Denver",
+      "state": "CO",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 1457.43,
+      "cameras_per_sqkm": 0,
+      "rank": 12
+    },
+    {
+      "city": "Seattle",
+      "state": "WA",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 477.06,
+      "cameras_per_sqkm": 0,
+      "rank": 13
+    },
+    {
+      "city": "Boston",
+      "state": "MA",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 317.48,
+      "cameras_per_sqkm": 0,
+      "rank": 14
+    },
+    {
+      "city": "San Francisco",
+      "state": "CA",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 192.24,
+      "cameras_per_sqkm": 0,
+      "rank": 15
+    },
+    {
+      "city": "Las Vegas",
+      "state": "NV",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 851.49,
+      "cameras_per_sqkm": 0,
+      "rank": 16
+    },
+    {
+      "city": "Portland",
+      "state": "OR",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 692.44,
+      "cameras_per_sqkm": 0,
+      "rank": 17
+    },
+    {
+      "city": "Nashville",
+      "state": "TN",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 2335.99,
+      "cameras_per_sqkm": 0,
+      "rank": 18
+    },
+    {
+      "city": "Austin",
+      "state": "TX",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 1627.81,
+      "cameras_per_sqkm": 0,
+      "rank": 19
+    },
+    {
+      "city": "Dallas",
+      "state": "TX",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 1832.75,
+      "cameras_per_sqkm": 0,
+      "rank": 20
+    },
+    {
+      "city": "Baltimore",
+      "state": "MD",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 307.17,
+      "cameras_per_sqkm": 0,
+      "rank": 21
+    },
+    {
+      "city": "Memphis",
+      "state": "TN",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 957.64,
+      "cameras_per_sqkm": 0,
+      "rank": 22
+    },
+    {
+      "city": "Sacramento",
+      "state": "CA",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 498.78,
+      "cameras_per_sqkm": 0,
+      "rank": 23
+    },
+    {
+      "city": "Tucson",
+      "state": "AZ",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 913.3,
+      "cameras_per_sqkm": 0,
+      "rank": 24
+    },
+    {
+      "city": "New Orleans",
+      "state": "LA",
+      "total_cameras": 0,
+      "bbox_area_sqkm": 1022.71,
+      "cameras_per_sqkm": 0,
+      "rank": 25
+    }
+  ]
+}
