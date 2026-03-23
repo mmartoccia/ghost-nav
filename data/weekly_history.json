@@ -1,0 +1,24 @@
+[
+  {
+    "week": "2026-W12",
+    "date": "2026-03-23",
+    "commutes": [
+      {
+        "name": "Summerville to Charleston",
+        "start": [
+          33.0185,
+          -80.1762
+        ],
+        "end": [
+          32.7765,
+          -79.9311
+        ],
+        "fastest_cameras": 5,
+        "ghost_cameras": 2,
+        "cameras_avoided": 3,
+        "privacy_score": 80,
+        "stub": true
+      }
+    ]
+  }
+]

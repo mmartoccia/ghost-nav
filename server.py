@@ -11,6 +11,13 @@ import threading
 import uuid
 from datetime import datetime, timezone
 
+# Weekly report module (optional — graceful fallback if jinja2 not installed)
+try:
+    from weekly_report import generate_weekly_report as _gen_weekly_report
+    _WEEKLY_REPORT_AVAILABLE = True
+except ImportError:
+    _WEEKLY_REPORT_AVAILABLE = False
+
 PORT = 8766
 DIR = os.path.dirname(os.path.abspath(__file__))
 VERSION = '1.0'
@@ -1162,6 +1169,46 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith('/proxy/overpass?'):
             query = self.path.split('?', 1)[1]
             self._proxy_get(f'https://overpass-api.de/api/interpreter?{query}', timeout=30)
+            return
+
+        # ── GET /weekly-report ────────────────────────────────────────────────
+        if self.path.startswith('/weekly-report'):
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+            commute_filter = params.get('commute', [None])[0]
+
+            if not _WEEKLY_REPORT_AVAILABLE:
+                error_html = (
+                    b'<html><body style="background:#0a0a0a;color:#e5e5e5;font-family:sans-serif;padding:2rem">'
+                    b'<h1 style="color:#22c55e">Ghost Nav</h1>'
+                    b'<p>Weekly report unavailable: jinja2 not installed.</p>'
+                    b'<p>Run: <code>pip3 install jinja2</code></p>'
+                    b'</body></html>'
+                )
+                self.send_response(503)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Length', str(len(error_html)))
+                self.end_headers()
+                self.wfile.write(error_html)
+                return
+
+            try:
+                html = _gen_weekly_report(filter_name=commute_filter)
+                data = html.encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Length', str(len(data)))
+                self.send_header('Cache-Control', 'no-cache')
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception as e:
+                print(f'[weekly-report] Error: {e}')
+                err = f'<html><body><pre>Weekly report error: {e}</pre></body></html>'.encode()
+                self.send_response(500)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Length', str(len(err)))
+                self.end_headers()
+                self.wfile.write(err)
             return
 
         super().do_GET()
