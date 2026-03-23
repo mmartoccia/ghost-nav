@@ -1,0 +1,85 @@
+{
+  "numeric": {
+    "variant_text": "Privacy Score: 42/100 | Cameras passed: 7 | Cameras avoided: 4",
+    "trials": [
+      {
+        "clarity": 4,
+        "actionability": 3,
+        "trust": 4,
+        "total": 11,
+        "reasoning": "Clear score format, familiar 0-100 scale. Pipes separate info but actionability is limited \u2014 doesn't tell me what to do with this info."
+      },
+      {
+        "clarity": 4,
+        "actionability": 3,
+        "trust": 4,
+        "total": 11,
+        "reasoning": "Easy to read at a glance. The 42/100 gives a sense of grade but no clear next step. Data builds trust."
+      },
+      {
+        "clarity": 3,
+        "actionability": 3,
+        "trust": 4,
+        "total": 10,
+        "reasoning": "A bit data-dense for a driver. Clarity suffers slightly from pipe-delimited format. Trust is good due to specifics."
+      }
+    ],
+    "avg_total": 10.666666666666666
+  },
+  "letter_grade": {
+    "variant_text": "Route Privacy: C+ | 7 cameras on this route (4 avoidable)",
+    "trials": [
+      {
+        "clarity": 5,
+        "actionability": 4,
+        "trust": 4,
+        "total": 13,
+        "reasoning": "Letter grade is instantly understood \u2014 no decoding needed. Avoidable cameras hint at action. Highly clear format."
+      },
+      {
+        "clarity": 5,
+        "actionability": 4,
+        "trust": 5,
+        "total": 14,
+        "reasoning": "Grade + detail combo is very clear. The word 'avoidable' is subtly actionable. Trust comes from specific numbers."
+      },
+      {
+        "clarity": 5,
+        "actionability": 4,
+        "trust": 4,
+        "total": 13,
+        "reasoning": "Best clarity of the three formats. Intuitive grading. Avoidable count suggests better routes exist. Solid trust."
+      }
+    ],
+    "avg_total": 13.333333333333334
+  },
+  "plain_english": {
+    "variant_text": "This route passes 7 surveillance cameras. A privacy-optimized route exists that avoids 4 of them, adding 3 minutes.",
+    "trials": [
+      {
+        "clarity": 5,
+        "actionability": 5,
+        "trust": 5,
+        "total": 15,
+        "reasoning": "Full sentence format is maximally clear. Explicit alternative route mentioned with time cost. Builds trust by being transparent about tradeoff."
+      },
+      {
+        "clarity": 4,
+        "actionability": 5,
+        "trust": 5,
+        "total": 14,
+        "reasoning": "Very actionable \u2014 tells you exactly what's possible and at what cost. Slightly verbose for a driving UI but high trust and clarity."
+      },
+      {
+        "clarity": 5,
+        "actionability": 5,
+        "trust": 5,
+        "total": 15,
+        "reasoning": "Best actionability \u2014 'a privacy-optimized route exists' is a direct prompt to act. Time cost shown builds trust. Clear prose."
+      }
+    ],
+    "avg_total": 14.666666666666666
+  },
+  "winner": "plain_english",
+  "winner_text": "This route passes 7 surveillance cameras. A privacy-optimized route exists that avoids 4 of them, adding 3 minutes."
+}

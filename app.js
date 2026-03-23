@@ -1276,9 +1276,45 @@ function clearRouteLayers() {
 
 // ─── Panel rendering ──────────────────────────────────────────────────────────
 
+// ─── Ghost Privacy Score Panel (GHOST-RESEARCH-004: plain_english winner) ─────
+// Winning copy format: plain_english (avg score 14.7/15)
+// "This route passes 7 surveillance cameras. A privacy-optimized route exists
+//  that avoids 4 of them, adding 3 minutes."
+function renderGhostScorePanel(fastestItem, ghostItem) {
+  const panel = document.getElementById('ghost-score-panel');
+  if (!panel) return;
+
+  const fastCams = fastestItem ? fastestItem.cameraHits : 0;
+
+  if (fastCams === 0) {
+    panel.className = 'ghost-score-panel ghost-score-panel--clean';
+    panel.innerHTML = `<div class="score-line score-line--alt">🟢 This route passes no surveillance cameras.</div>`;
+    panel.classList.remove('hidden');
+    return;
+  }
+
+  let html = `<div class="score-line">👁 This route passes <strong>${fastCams}</strong> surveillance camera${fastCams !== 1 ? 's' : ''}.</div>`;
+
+  if (ghostItem && ghostItem.cameraHits < fastCams) {
+    const avoided  = fastCams - ghostItem.cameraHits;
+    const extraMin = Math.round((ghostItem.duration - fastestItem.duration) / 60);
+    const timeStr  = extraMin > 0 ? `, adding ${extraMin} minute${extraMin !== 1 ? 's' : ''}` : ' with no extra time';
+    html += `<div class="score-line score-line--alt">👻 A privacy-optimized route exists that avoids <strong>${avoided}</strong> of them${timeStr}.</div>`;
+  } else if (ghostItem) {
+    html += `<div class="score-line score-line--alt">👻 Ghost route found — no additional cameras avoided on this trip.</div>`;
+  }
+
+  panel.className = 'ghost-score-panel';
+  panel.innerHTML = html;
+  panel.classList.remove('hidden');
+}
+
 function renderDualRoutePanel(fastestItem, ghostItem, altItems) {
   const container = document.getElementById('route-cards');
   container.innerHTML = '';
+
+  // ── Ghost Privacy Score Panel (plain_english format) ──
+  renderGhostScorePanel(fastestItem, ghostItem);
 
   // ── Ghost preference toggle ──
   const toggleRow = document.createElement('div');
