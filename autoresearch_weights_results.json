@@ -1,0 +1,466 @@
+{
+  "task": "GHOST-RESEARCH-002",
+  "timestamp": "2026-03-23T00:08:38Z",
+  "metric": "cameras_avoided / max(extra_travel_seconds, 1)",
+  "test_routes": [
+    "Home Depot Summerville \u2192 Sandy Bend Ln",
+    "Summerville Downtown \u2192 Carnes Crossroads",
+    "Walmart Summerville \u2192 Pine Forest",
+    "Azalea Square \u2192 Ladson",
+    "North Summerville \u2192 Jedburg"
+  ],
+  "variants_ranked": [
+    {
+      "camera_facing": 3.0,
+      "camera_not_facing": 1.2,
+      "radius_m": 30,
+      "total_cameras_avoided": 2,
+      "total_extra_seconds": 996,
+      "score": 0.002008,
+      "route_details": [
+        {
+          "route": "Home Depot Summerville \u2192 Sandy Bend Ln",
+          "fastest_cams_at_radius": 4,
+          "ghost_cams_at_radius": 2,
+          "avoided_at_radius": 2,
+          "extra_seconds": 996,
+          "weighted_avoided": 2.4
+        },
+        {
+          "route": "Summerville Downtown \u2192 Carnes Crossroads",
+          "fastest_cams_at_radius": 3,
+          "ghost_cams_at_radius": 3,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Walmart Summerville \u2192 Pine Forest",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Azalea Square \u2192 Ladson",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "North Summerville \u2192 Jedburg",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        }
+      ]
+    },
+    {
+      "camera_facing": 4.0,
+      "camera_not_facing": 1.5,
+      "radius_m": 50,
+      "total_cameras_avoided": 1,
+      "total_extra_seconds": 996,
+      "score": 0.001004,
+      "route_details": [
+        {
+          "route": "Home Depot Summerville \u2192 Sandy Bend Ln",
+          "fastest_cams_at_radius": 5,
+          "ghost_cams_at_radius": 4,
+          "avoided_at_radius": 1,
+          "extra_seconds": 996,
+          "weighted_avoided": 1.5
+        },
+        {
+          "route": "Summerville Downtown \u2192 Carnes Crossroads",
+          "fastest_cams_at_radius": 3,
+          "ghost_cams_at_radius": 3,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Walmart Summerville \u2192 Pine Forest",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Azalea Square \u2192 Ladson",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "North Summerville \u2192 Jedburg",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        }
+      ]
+    },
+    {
+      "camera_facing": 6.0,
+      "camera_not_facing": 2.0,
+      "radius_m": 75,
+      "total_cameras_avoided": 1,
+      "total_extra_seconds": 996,
+      "score": 0.001004,
+      "route_details": [
+        {
+          "route": "Home Depot Summerville \u2192 Sandy Bend Ln",
+          "fastest_cams_at_radius": 5,
+          "ghost_cams_at_radius": 4,
+          "avoided_at_radius": 1,
+          "extra_seconds": 996,
+          "weighted_avoided": 2.0
+        },
+        {
+          "route": "Summerville Downtown \u2192 Carnes Crossroads",
+          "fastest_cams_at_radius": 3,
+          "ghost_cams_at_radius": 3,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Walmart Summerville \u2192 Pine Forest",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Azalea Square \u2192 Ladson",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "North Summerville \u2192 Jedburg",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        }
+      ]
+    },
+    {
+      "camera_facing": 8.0,
+      "camera_not_facing": 3.0,
+      "radius_m": 100,
+      "total_cameras_avoided": 1,
+      "total_extra_seconds": 996,
+      "score": 0.001004,
+      "route_details": [
+        {
+          "route": "Home Depot Summerville \u2192 Sandy Bend Ln",
+          "fastest_cams_at_radius": 5,
+          "ghost_cams_at_radius": 4,
+          "avoided_at_radius": 1,
+          "extra_seconds": 996,
+          "weighted_avoided": 3.0
+        },
+        {
+          "route": "Summerville Downtown \u2192 Carnes Crossroads",
+          "fastest_cams_at_radius": 3,
+          "ghost_cams_at_radius": 3,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Walmart Summerville \u2192 Pine Forest",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Azalea Square \u2192 Ladson",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "North Summerville \u2192 Jedburg",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        }
+      ]
+    },
+    {
+      "camera_facing": 4.0,
+      "camera_not_facing": 1.0,
+      "radius_m": 50,
+      "total_cameras_avoided": 1,
+      "total_extra_seconds": 996,
+      "score": 0.001004,
+      "route_details": [
+        {
+          "route": "Home Depot Summerville \u2192 Sandy Bend Ln",
+          "fastest_cams_at_radius": 5,
+          "ghost_cams_at_radius": 4,
+          "avoided_at_radius": 1,
+          "extra_seconds": 996,
+          "weighted_avoided": 1.0
+        },
+        {
+          "route": "Summerville Downtown \u2192 Carnes Crossroads",
+          "fastest_cams_at_radius": 3,
+          "ghost_cams_at_radius": 3,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Walmart Summerville \u2192 Pine Forest",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Azalea Square \u2192 Ladson",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "North Summerville \u2192 Jedburg",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        }
+      ]
+    },
+    {
+      "camera_facing": 5.0,
+      "camera_not_facing": 2.5,
+      "radius_m": 60,
+      "total_cameras_avoided": 1,
+      "total_extra_seconds": 996,
+      "score": 0.001004,
+      "route_details": [
+        {
+          "route": "Home Depot Summerville \u2192 Sandy Bend Ln",
+          "fastest_cams_at_radius": 5,
+          "ghost_cams_at_radius": 4,
+          "avoided_at_radius": 1,
+          "extra_seconds": 996,
+          "weighted_avoided": 2.5
+        },
+        {
+          "route": "Summerville Downtown \u2192 Carnes Crossroads",
+          "fastest_cams_at_radius": 3,
+          "ghost_cams_at_radius": 3,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Walmart Summerville \u2192 Pine Forest",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "Azalea Square \u2192 Ladson",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        },
+        {
+          "route": "North Summerville \u2192 Jedburg",
+          "fastest_cams_at_radius": 0,
+          "ghost_cams_at_radius": 0,
+          "avoided_at_radius": 0,
+          "extra_seconds": 0,
+          "weighted_avoided": 0.0
+        }
+      ]
+    }
+  ],
+  "winner": {
+    "camera_facing": 3.0,
+    "camera_not_facing": 1.2,
+    "radius_m": 30,
+    "score": 0.002008
+  },
+  "recommended_server_py_constants": {
+    "CAMERA_PROXIMITY_M": 30,
+    "note": "camera_facing and camera_not_facing are conceptual weights. In server.py, CAMERA_PROXIMITY_M is the primary tunable. Optimal radius=30m. Consider adding directional weighting for facing vs non-facing cameras."
+  },
+  "baseline_routes": [
+    {
+      "route": "Home Depot Summerville \u2192 Sandy Bend Ln",
+      "origin": [
+        33.0307,
+        -80.1614
+      ],
+      "dest": [
+        33.0771,
+        -80.1219
+      ],
+      "fastest": {
+        "geometry": "cw`_~@vvs{wCoAxCi^}SXw@tC}HtDcKfUwf@_\\}PcE{AcMqEqQuBuYJoU~DyTdIoXhSgEtC}LzCkIj@iHgCiUyVqGoQiAkCgRub@{HiQec@gcAaFcMgIoSmLm_@aG}VyC}PW_BiJmj@yFic@mEq\\aByMoCmTqGoc@cE_YyAaMuRw`BkOcpA{Ey`@oKa`@mDyXcIkp@aBqBwCa@qVlDeKdBiI~EoLlLeFhRuAjSLvQx@bOdAlTj@dXk@lLuAfJoCxJ}CdI}CbHk`@jk@ohEflEy}@p_AglBljBuqEtvEwLdGwt@pl@aQbKuMxF{P~EoWlEuqAjHoRo@sSqDu^gVs@e@eJgGi]}k@cSgb@iMmf@aW_aBmFo]qDoT_Hck@wAyIgA}FoAqGcBoH}BoIaCqIuBuGc@wAkCyHuCeHi@kAeByDyFiLaF_JgDyF{DkGmEqGyEgGoGyHsIaJmIyHkJqHuEiDeAu@_DwBsCkB}EoCkEyBuJ}EoJaEeG_CmJ{C}F}AoKcCmFcA_Fw@MCiKuAuS}CyY_EgHaAyUcDgU_DwCa@cLiBqF}@mIaBkAYsEgAoIwB}EyAcGeBaF}AeHeCsH}CqEmBqEkBwEcCmFqC{DwBiJiFqGyDsXyRyOcNmRmQqPgSkPuUuWqa@aGoKqBgEmEuJuIwNmMk[_hBsmEib@caA_b@wlA}b@ooAc[go@ia@{g@_G_G{D{DuQoOwXqRoq@c`@kYaPykB{eA{SoNcNkKgHiGiFaH__@sk@ul@myAkNi]dEwDvw@us@fIuJvPmZhe@saAjBwHbQqs@hSqaAtM_y@`IapAfBcaAbBs_A~A{{ABkCs\\o@_[m@q\\eBeVkCoM{DwJwCyNmFaMcH",
+        "distance_m": 9623,
+        "duration_s": 764,
+        "cameras": 5,
+        "privacy_score": 50
+      },
+      "ghost": {
+        "geometry": "cw`_~@vvs{wCoAxCi^}SXw@tC}HtDcKfUwf@rm@t`@nf@rY`qAfy@zd@`Yn_BlaAb]vSvUlPxEnDnQ|M~NlOvLvMbRbWjTp_@kJpQ}DtHwB`EiBlDoE~JiAjCiJvSaEfJsBrEkBpDwDtHqRbe@oFlMsDdJ}FtNmEjKcIlQqEbKgCtFyM~YsBlEmE~JyC`F}CmC}KcIUQqJaHyCsBsFyDwCsBkFqDwF}D}KyHcGaEyAcAmE}CmDcCaDyB}AgA}DoCq@c@yN_K}FuDaHeFgJkGmBqAeLyHiScNwNaKqJgGiJcGwCsBoCiBwH{F]WiF{EcB_B_JgKcDwDsEqFoLnWoJ~SoMhYuVzl@oUvg@uCnH}F~M_FnMyBr@qF~EmHlCiHaB}C}@uNcDsCi@wH}AoFcAyVmEeG}@sF{A}I{AsBk@{MeCgASyAM}A]gC}@qByBcByBiAmA}AwC}EaHe@m@mEcF{@{A{AoHhGyb@hC_L`GkGbKyDfF{D~DsFrBoPbAaRt@kFhDsGpDkCxEh@nC`BjHnQhDxJxBdFfCvC`CxBbAl@??vDtD~@n@RLrIdLlHfHzEpGz_AxjAnUwg@tV{l@nMiYnJ_TnLoWoEwHmD_HyCoHmAcCiBmEgAiCmEaK_Qe`@iLwWmGmN_A}BcIwQcJuSkBcEg@kAkJwSsJuUiF}LeAeCsB_Fe@iAwC}HoHcSiJuVyFuNcNuXoDyQBoL`CwKxJmSfEuCnXiSxTeInU_EtYKpQtBbMpEbEzA~[|PhU{m@l@aBbLqZxCoM|@gHl@gI^cFKgSq@iL}BeOuCeMaT{e@_DeH_NkZ{GiQcFqUkE{UmAuGoL{l@y@_E_BmKa@kIy@sNCeJ|@mA\\gAHqApAuFrD_EvC{DpE_F`CaFpBaGj@_HEuHy@gJkUglAsAaJsAqJ}@}E{BcE_nAwqAus@cv@mGeEaFaBcFq@iKXVvbAaGbi@gC~H}HtJsIhDiDzDoAdDwBdRwChL}DdFe@vC{A~CoHlIy^dYgI`IyAvF_AtH_A~TOdDWpHCrKrDhb@xAnLyHRgMpCo@ZgBvAeGjD{EfDoCmTqGoc@cE_YyAaMuRw`BkOcpA{Ey`@oKa`@mDyXcIkp@aBqBwCa@qVlDeKdBiI~EoLlLeFhRuAjSLvQx@bOdAlTj@dXk@lLuAfJoCxJ}CdI}CbHk`@jk@ohEflEy}@p_AglBljBuqEtvEwLdG??wt@pl@aQbKuMxF{P~EoWlEuqAjHoRo@sSqDu^gVs@e@eJgGi]}k@cSgb@iMmf@aW_aBmFo]qDoT_Hck@wAyIgA}FoAqGcBoH}BoIaCqIuBuGc@wAkCyHuCeHi@kAeByDyFiLaF_JgDyF{DkGmEqGyEgGoGyHsIaJmIyHkJqHuEiDrBiFt@mBlGwN~BcFrBsDjKyOfLmLbSaLjDoBvTyEpNsA~Sd@fTdDfQ`E`[xGt]xFzVz@hSqA|]gLbg@cV`]yPvBhHdLl_@vCtEb@R|FlCpHj@LoJ|@oBjCyBrg@aPhE~@|GpY~HoChRaHfGFp@l@z@X~@@PEj@Or@k@d@{@TiADg@U}Ag@kA_@YQQ{@UwEyG}MwYg@_FcC{FwM{[}C}G_B}DqEzCoChBg\\`TudAlj@ms@v\\sR|HyWzDkQ\\mQkA{ZwFgYsFsUyE{MoBsN}@aNViOpAcN~CkH|CeJzDsMrIqE|EmExEsIfOwCvFwBrE_FdLyAhDmBpEsCkB}EoCkEyBuJ}EoJaEeG_CmJ{C}F}AoKcCmFcA_Fw@MCiKuAuS}CyY_EgHaAyUcDgU_DwCa@cLiBqF}@mIaBkAYsEgAoIwB}EyAcGeBaF}AeHeCsH}CqEmBqEkBwEcCmFqC{DwBiJiFqGyDsXyRyOcNmRmQqPgSkPuUuWqa@aGoKqBgEmEuJuIwNmMk[_hBsmEib@caA_b@wlA}b@ooAc[go@ia@{g@_G_G{D{DuQoOwXqRoq@c`@kYaPykB{eA{SoNcNkKgHiGiFaH__@sk@ul@myAkNi]dEwDvw@us@fIuJvPmZhe@saAjBwHbQqs@hSqaAtM_y@`IapAfBcaAbBs_A~A{{ABkCs\\o@_[m@q\\eBeVkCoM{DwJwCyNmFaMcH",
+        "distance_m": 17661,
+        "duration_s": 1760,
+        "cameras": 4,
+        "privacy_score": 27
+      },
+      "cameras_avoided": 1,
+      "extra_distance_m": 8038,
+      "extra_duration_s": 996
+    },
+    {
+      "route": "Summerville Downtown \u2192 Carnes Crossroads",
+      "origin": [
+        33.0176,
+        -80.1757
+      ],
+      "dest": [
+        33.0621,
+        -80.1052
+      ],
+      "fastest": {
+        "geometry": "okf~}@jap|wC|DpB|L`LiBbEoD~HwLdXi@nAsEbKmBiByKuJe[sXmGwE_MiIiEyC{@i@gCaBuK_H}l@w_@wH}E_IcFcJ{FcQoH_GeCoSuKyVuPqGoEsMcJqA}@sHiF{F}D_FkDqLiIeLaIq\\sVqLyImNkKmEcDuJiH_NkJeIuFqMqIaHmFmCoBoJoGqJoGuIeG{IiGkn@ic@eD}B}CmC}KcIUQqJaHyCsBsFyDwCsBkFqDwF}D}KyHcGaEyAcAmE}CmDcCaDyB}AgA}DoCq@c@yN_K}FuDaHeFgJkGmBqAeLyHiScNwNaKqJgGiJcGwCsBoCiBwH{F]WiF{EcB_B_JgKcDwDsEqFoEwHmD_HyCoHmAcCiBmEgAiCmEaK_Qe`@iLwWmGmN_A}BcIwQcJuSkBcEg@kAkJwSsJuUiF}LeAeCsB_Fe@iAwC}HoHcSiJuVyFuNcNuX{AyCcSca@}@_KoSkc@qGoQiAkCgRub@{HiQec@gcAaFcMgIoSmLm_@aG}VyC}PW_BiJmj@yFic@mEq\\aByMoCmTqGoc@cE_YyAaMuRw`BkOcpA{Ey`@[qC{Eu`@mAuJiZwzBeDqVcGsf@gLifA_A}I{CoUoF{a@_CyQq@yF}Fmd@iHik@sSw}AqEa]_DiX_B_NcF_c@m@oEi@cFu@kFwCmVwCmVaEk\\yBqQk@oEuCaWcCuSWwB}@kGwByTcAiHgDoDaC{NcBgNUmBcA_IqB_PgA{IaAgIeAyHgGgf@[mC_Eg\\oD}YiHml@qFyc@sFcd@cAoHoDiXaBcM]gCuDcZcEm\\oCsTkC}SuDmZ_@qCsDwYmEq]kDqX_PsoAoDeY}NwjAyAsMiH_o@}@gHkGug@yIqo@wA_KkB{M_Fw`@gAiI_AmH{C}UuEk^gC}RsMkcAk@qE_Ee[yByQa@eD}OmoAqC}ToSsaB_BmMm@{EyEq^cDwVQuAo@aF_AcHi@mEyBqMuBcKcBiIu@gDiF}TaGsTwKuZyDwKcLmV}DsIuNkXoI}O}_@}j@mIgJiNcPmQyOas@_j@cR{NaeAmz@iGqEsOaLiGoEwEiDqJ{IwPmMkg@_`@oj@mb@_i@u_@md@a]u\\kYgWuR_X_RuDcDwD`I_OlZeKrVyJtQ{JnToAlCiCtDaMjPm@hE}c@nd@{GjGkI|KuJjSiCrIiCfNiAdNiCpvAsDGca@u@ubAgBsYi@G|Bs@j[",
+        "distance_m": 9920,
+        "duration_s": 702,
+        "cameras": 3,
+        "privacy_score": 70
+      },
+      "ghost": {
+        "geometry": "okf~}@jap|wC|DpB|L`LiBbEoD~HwLdXi@nAsEbKmBiByKuJe[sXmGwE_MiIiEyC{@i@gCaBuK_H}l@w_@wH}E_IcFcJ{FcQoH_GeCoSuKyVuPqGoEsMcJqA}@sHiF{F}D_FkDqLiIeLaIq\\sVqLyImNkKmEcDuJiH_NkJeIuFqMqIaHmFmCoBoJoGqJoGuIeG{IiGkn@ic@eD}B}CmC}KcIUQqJaHyCsBsFyDwCsBkFqDwF}D}KyHcGaEyAcAmE}CmDcCaDyB}AgA}DoCq@c@yN_K}FuDaHeFgJkGmBqAeLyHiScNwNaKqJgGiJcGwCsBoCiBwH{F]WiF{EcB_B_JgKcDwDsEqFoEwHmD_HyCoHmAcCiBmEgAiCmEaK_Qe`@iLwWmGmN_A}BcIwQcJuSkBcEg@kAkJwSsJuUiF}LeAeCsB_Fe@iAwC}HoHcSiJuVyFuNcNuX{AyCcSca@}@_KoSkc@qGoQiAkCgRub@{HiQec@gcAaFcMgIoSmLm_@aG}VyC}PW_BiJmj@yFic@mEq\\aByMoCmTqGoc@cE_YyAaMuRw`BkOcpA{Ey`@[qC{Eu`@mAuJiZwzBeDqVcGsf@gLifA_A}I{CoUoF{a@_CyQq@yF}Fmd@iHik@sSw}AqEa]_DiX_B_NcF_c@m@oEi@cFu@kFwCmVwCmVaEk\\yBqQk@oEuCaWcCuSWwB}@kGwByTcAiHgDoDaC{NcBgNUmBcA_IqB_PgA{IaAgIeAyHgGgf@[mC_Eg\\oD}YiHml@qFyc@sFcd@cAoHoDiXaBcM]gCuDcZcEm\\oCsTkC}SuDmZ_@qCsDwYmEq]kDqX_PsoAoDeY}NwjAyAsMiH_o@}@gHkGug@yIqo@wA_KkB{M_Fw`@gAiI_AmH{C}UuEk^gC}RsMkcAk@qE_Ee[yByQa@eD}OmoAqC}ToSsaB_BmMm@{EyEq^cDwVQuAo@aF_AcHi@mEyBqMuBcKcBiIu@gDiF}TaGsTwKuZyDwKcLmV}DsIuNkXoI}O}_@}j@mIgJiNcPmQyOas@_j@cR{NaeAmz@iGqEsOaLiGoEwEiDqJ{IwPmMkg@_`@oj@mb@_i@u_@md@a]u\\kYgWuR_X_RuDcDwD`I_OlZeKrVyJtQ{JnToAlCiCtDaMjPm@hE}c@nd@{GjGkI|KuJjSiCrIiCfNiAdNiCpvAsDGca@u@ubAgBsYi@G|Bs@j[",
+        "distance_m": 9920,
+        "duration_s": 702,
+        "cameras": 3,
+        "privacy_score": 40
+      },
+      "cameras_avoided": 0,
+      "extra_distance_m": 0,
+      "extra_duration_s": 0
+    },
+    {
+      "route": "Walmart Summerville \u2192 Pine Forest",
+      "origin": [
+        33.0082,
+        -80.1889
+      ],
+      "dest": [
+        33.0493,
+        -80.1543
+      ],
+      "fastest": {
+        "geometry": "i~s}}@r|h}wCeCuKIaAWwC`AwFDeDdNiBnAQlNwBPElCg@le@qGaCeEgPoT{NqT_AwA{KgNeEcG}EsFeEaG_CyCkAyAuKgOcQ}T}DsFsP}TiByBaY}^}DuEaVs[_KyLqFsH{FaIcAuAwSiXgUgY}NqR{G}ImMqPiIuIu@w@cLoL_GkFgIeH}GyFsRkPqWgS{H_HuFwEgFgE{DaD_RuO_EwC}FoEyFsEeLwHuXkSmL_IeKcHwHgF}p@yd@cRsKqEuCuQkLWOy`@gWmBiByKuJe[sXmGwE_MiIiEyC{@i@gCaBuK_H}l@w_@wH}E_IcFcJ{FcQoH_GeCoSuKyVuPqGoEsMcJqA}@sHiF{F}D_FkDqLiIeLaIq\\sVqLyImNkKmEcDuJiH_NkJeIuFqMqIaHmFmCoBoJoGqJoGuIeG{IiGkn@ic@eD}B}CmC}KcIUQqJaHyCsBsFyDwCsBkFqDwF}D}KyHcGaEyAcAmE}CmDcCaDyB}AgA}DoCq@c@yN_K}FuDaHeFgJkGmBqAeLyHiScNwNaKqJgGiJcGwCsBoCiBwH{F]WiF{EcB_B_JgKcDwDsEqFoEwHmD_HyCoHmAcCiBmEgAiCmEaK_Qe`@iLwWmGmN_A}BcIwQcJuSkBcEg@kAkJwSsJuUiF}LeAeCsB_Fe@iAwC}HoHcSiJuVyFuNcNuX{AyCcSca@}@_KoSkc@qGoQiAkCgRub@{HiQec@gcAaFcMgIoSmLm_@aG}VyC}PW_BiJmj@yFic@mEq\\aByMoCmTqGoc@cE_YyAaMuRw`BkOcpA{Ey`@[qC{Eu`@mAuJiZwzBeDqVcGsf@gLifA_A}I{CoUwG|AmSvF}ErA_ItBiIlDaHpJiF~GaJvTuKd[uQph@oC|J}@vEsBpKcCnTs@zHQ|Eo@bPoBfSqDdT}@dDiFpR}KhXcNrUig@pv@wJtNeLtNgLdNe@h@cNrGkA]oACkATcAt@}@dAi@`BKhBNhBwA`FoKtRgOpR}CzDyWd^uQzTyKfMmAvAoBzBuR`RyKzGkYj]oSdYaVj\\_R`XsEvGaRp[qJrNkJjKqL`KoMpHgLxF_F~AmXimAmHaPiGwH",
+        "distance_m": 7794,
+        "duration_s": 634,
+        "cameras": 0,
+        "privacy_score": 100
+      },
+      "ghost": {
+        "geometry": "i~s}}@r|h}wCeCuKIaAWwC`AwFDeDdNiBnAQlNwBPElCg@le@qGaCeEgPoT{NqT_AwA{KgNeEcG}EsFeEaG_CyCkAyAuKgOcQ}T}DsFsP}TiByBaY}^}DuEaVs[_KyLqFsH{FaIcAuAwSiXgUgY}NqR{G}ImMqPiIuIu@w@cLoL_GkFgIeH}GyFsRkPqWgS{H_HuFwEgFgE{DaD_RuO_EwC}FoEyFsEeLwHuXkSmL_IeKcHwHgF}p@yd@cRsKqEuCuQkLWOy`@gWmBiByKuJe[sXmGwE_MiIiEyC{@i@gCaBuK_H}l@w_@wH}E_IcFcJ{FcQoH_GeCoSuKyVuPqGoEsMcJqA}@sHiF{F}D_FkDqLiIeLaIq\\sVqLyImNkKmEcDuJiH_NkJeIuFqMqIaHmFmCoBoJoGqJoGuIeG{IiGkn@ic@eD}B}CmC}KcIUQqJaHyCsBsFyDwCsBkFqDwF}D}KyHcGaEyAcAmE}CmDcCaDyB}AgA}DoCq@c@yN_K}FuDaHeFgJkGmBqAeLyHiScNwNaKqJgGiJcGwCsBoCiBwH{F]WiF{EcB_B_JgKcDwDsEqFoEwHmD_HyCoHmAcCiBmEgAiCmEaK_Qe`@iLwWmGmN_A}BcIwQcJuSkBcEg@kAkJwSsJuUiF}LeAeCsB_Fe@iAwC}HoHcSiJuVyFuNcNuX{AyCcSca@}@_KoSkc@qGoQiAkCgRub@{HiQec@gcAaFcMgIoSmLm_@aG}VyC}PW_BiJmj@yFic@mEq\\aByMoCmTqGoc@cE_YyAaMuRw`BkOcpA{Ey`@[qC{Eu`@mAuJiZwzBeDqVcGsf@gLifA_A}I{CoUwG|AmSvF}ErA_ItBiIlDaHpJiF~GaJvTuKd[uQph@oC|J}@vEsBpKcCnTs@zHQ|Eo@bPoBfSqDdT}@dDiFpR}KhXcNrUig@pv@wJtNeLtNgLdNe@h@cNrGkA]oACkATcAt@}@dAi@`BKhBNhBwA`FoKtRgOpR}CzDyWd^uQzTyKfMmAvAoBzBuR`RyKzGkYj]oSdYaVj\\_R`XsEvGaRp[qJrNkJjKqL`KoMpHgLxF_F~AmXimAmHaPiGwH",
+        "distance_m": 7794,
+        "duration_s": 634,
+        "cameras": 0,
+        "privacy_score": 100
+      },
+      "cameras_avoided": 0,
+      "extra_distance_m": 0,
+      "extra_duration_s": 0
+    },
+    {
+      "route": "Azalea Square \u2192 Ladson",
+      "origin": [
+        33.0145,
+        -80.1623
+      ],
+      "dest": [
+        32.9876,
+        -80.1234
+      ],
+      "fastest": {
+        "geometry": "gm_~}@hwv{wCgWzk@lKxDzKzDtEsLnCaHrRuc@rKiVve@{fA|J_U~`@{}@zd@{jAnl@gtApm@gtAzi@onA~j@alApcA}`Cxe@agAl^oy@nG{NpMy[`Xqm@t[it@fC}Fd@gAvKcRrc@sgAnP}]pPa^bt@m_BrLuWl^_x@v|@qwBlkBkcE~n@wwAvY{r@`a@aaAjEkKrHsPjOa]dEkKxkAanChAwClAyChf@ihAtEoKvg@ckAfZyq@~EcLh]sw@dKuUjCgGdC}FzLgYxR}c@jKcVvWgm@nD?rGvDj@l@zA|@l@j@zAz@l@l@fJ`H",
+        "distance_m": 4796,
+        "duration_s": 450,
+        "cameras": 0,
+        "privacy_score": 100
+      },
+      "ghost": {
+        "geometry": "gm_~}@hwv{wCgWzk@lKxDzKzDtEsLnCaHrRuc@rKiVve@{fA|J_U~`@{}@zd@{jAnl@gtApm@gtAzi@onA~j@alApcA}`Cxe@agAl^oy@nG{NpMy[`Xqm@t[it@fC}Fd@gAvKcRrc@sgAnP}]pPa^bt@m_BrLuWl^_x@v|@qwBlkBkcE~n@wwAvY{r@`a@aaAjEkKrHsPjOa]dEkKxkAanChAwClAyChf@ihAtEoKvg@ckAfZyq@~EcLh]sw@dKuUjCgGdC}FzLgYxR}c@jKcVvWgm@nD?rGvDj@l@zA|@l@j@zAz@l@l@fJ`H",
+        "distance_m": 4796,
+        "duration_s": 450,
+        "cameras": 0,
+        "privacy_score": 100
+      },
+      "cameras_avoided": 0,
+      "extra_distance_m": 0,
+      "extra_duration_s": 0
+    },
+    {
+      "route": "North Summerville \u2192 Jedburg",
+      "origin": [
+        33.0532,
+        -80.1834
+      ],
+      "dest": [
+        33.0234,
+        -80.2345
+      ],
+      "fastest": {
+        "geometry": "__k`~@jtc}wChIl|@iEp@rD|^r@hHpH~UrHdVhMlUnHiKnTqYxKaOrRuPt_@{[pDaDxAqA~DsDpPuNdDuCrFyEj[iXfd@o`@jGoFfTyQrZaYvLsJz@w@fA_AbGyEzIcGhIuE`MyEvJgC`GqAhPcC`AKbRmCvRgCdTkC`k@kGvY{C~O_BhCc@jBk@tBeAlBsArC}BhD_DrFiFhEmF|CwEhCyEfLoWlE_KtDsI|d@~`@zmCtwB|PdNtNfL|d@`_@|i@fc@`y@`p@fHfGrTtPhl@ld@rMvJlr@vh@nRhO`EvDt_@`ZzDxClHrFtZfUvNrKtNdK`o@~c@ZTpXrRjL|HhItFvQ~LlUbPfQbLzIzFjCnAx@`@bEnBv@^rBbAz@\\`BPjBbAnFxBhJfGpQxMpEfD`EjBrAt@hAd@|AjAjDwH~BeFhGeOxMeYfTcf@|DoIlMk\\rGlEnFvAzGe@jGc@tGjBpEhAzDn@jDLhE_@jGWnHPrENbI^hEj@rFB|FwAnGeIpDuFjAqAjBm@hBMzEz@`B|@zAfBdB|AjEfD~MrF|Jz@zF]lANfGz@t@\\lEvCbA^vShBjC@fH_@zF]fC_@lKuD~BmA`C{@`WiMzBiBjB}@~GgN`DmItEgOhAyCz@eDnAiCrAyB~AyBjB{ApBkAxBm@`CM`G}@lG{AfGyBdGwA`HkBfLcCxEgAhWgCvMo@lA~A~z@fFxJb@`@nEnCjS~AlKh@fDzElTbA|DnDpNrBnIrFnSBJjDxNbAvCrA`HpB~IrA|HvCvNd@hD|@|I~CnS~CnS|@pH~DvWhA~IrApGbAbGfBbLPbAl@pEv@dGbAdF|DzVf@`GpBxKd@zBr@pGbAbGxBvOdA`GbCtP~AzK~ArIj@rDjArHz@xG`ChNn@rEp@vEhBjLtErZxBlNbAlGjAlIxCbRr@rF`A|FnAtHlBxLRnAbBvKjBlKv@tFv@lFnEhZnDfVrA`JbBnPnAnLJtA^lEX`EThDTnI^nIHrGJhK?pM?lEOnI]lJ{@fOu@fMsC|XaAvJ{@tFqDh]k@bJyFti@qDf^kEbe@cAlJsB|TkAnIeA~I{@|IcEt\\sAtMg@|Ie@xE}@~IiAdLkCnRo@nFm@zDS`Di@lFeAxJaC`RsBrQs@nHaCbR]lBeA~FaAlGeAdH}A`I_GtWkC~JcCbK_CtJgEzPiAnEaBnGaEbOaEnPuAlFkArFUz@iDhMuArFeLld@}AjGuBjIuC|KoDzPqAtFuEfR_@fAiAvEaArEiEvQ{EzU}@zEe@pCuBtK}@jGo@dFe@xFqBx[cGBsE|@wBv@iBr@cCnDuSdf@iHtOmOna@gUtm@sFrYeC|Qk@lOOzXq@ttAw@bbBAdGCve@e@j[GvD[xSyE||@oCz\\oLpyAyExn@[|DwMbuAqe@mJaNNsI~BgOnFyI`GsIjKgQta@oIvRsB~CoElC|Kxe@",
+        "distance_m": 9375,
+        "duration_s": 1160,
+        "cameras": 0,
+        "privacy_score": 100
+      },
+      "ghost": {
+        "geometry": "__k`~@jtc}wChIl|@iEp@rD|^r@hHpH~UrHdVhMlUnHiKnTqYxKaOrRuPt_@{[pDaDxAqA~DsDpPuNdDuCrFyEj[iXfd@o`@jGoFfTyQrZaYvLsJz@w@fA_AbGyEzIcGhIuE`MyEvJgC`GqAhPcC`AKbRmCvRgCdTkC`k@kGvY{C~O_BhCc@jBk@tBeAlBsArC}BhD_DrFiFhEmF|CwEhCyEfLoWlE_KtDsI|d@~`@zmCtwB|PdNtNfL|d@`_@|i@fc@`y@`p@fHfGrTtPhl@ld@rMvJlr@vh@nRhO`EvDt_@`ZzDxClHrFtZfUvNrKtNdK`o@~c@ZTpXrRjL|HhItFvQ~LlUbPfQbLzIzFjCnAx@`@bEnBv@^rBbAz@\\`BPjBbAnFxBhJfGpQxMpEfD`EjBrAt@hAd@|AjAjDwH~BeFhGeOxMeYfTcf@|DoIlMk\\rGlEnFvAzGe@jGc@tGjBpEhAzDn@jDLhE_@jGWnHPrENbI^hEj@rFB|FwAnGeIpDuFjAqAjBm@hBMzEz@`B|@zAfBdB|AjEfD~MrF|Jz@zF]lANfGz@t@\\lEvCbA^vShBjC@fH_@zF]fC_@lKuD~BmA`C{@`WiMzBiBjB}@~GgN`DmItEgOhAyCz@eDnAiCrAyB~AyBjB{ApBkAxBm@`CM`G}@lG{AfGyBdGwA`HkBfLcCxEgAhWgCvMo@lA~A~z@fFxJb@`@nEnCjS~AlKh@fDzElTbA|DnDpNrBnIrFnSBJjDxNbAvCrA`HpB~IrA|HvCvNd@hD|@|I~CnS~CnS|@pH~DvWhA~IrApGbAbGfBbLPbAl@pEv@dGbAdF|DzVf@`GpBxKd@zBr@pGbAbGxBvOdA`GbCtP~AzK~ArIj@rDjArHz@xG`ChNn@rEp@vEhBjLtErZxBlNbAlGjAlIxCbRr@rF`A|FnAtHlBxLRnAbBvKjBlKv@tFv@lFnEhZnDfVrA`JbBnPnAnLJtA^lEX`EThDTnI^nIHrGJhK?pM?lEOnI]lJ{@fOu@fMsC|XaAvJ{@tFqDh]k@bJyFti@qDf^kEbe@cAlJsB|TkAnIeA~I{@|IcEt\\sAtMg@|Ie@xE}@~IiAdLkCnRo@nFm@zDS`Di@lFeAxJaC`RsBrQs@nHaCbR]lBeA~FaAlGeAdH}A`I_GtWkC~JcCbK_CtJgEzPiAnEaBnGaEbOaEnPuAlFkArFUz@iDhMuArFeLld@}AjGuBjIuC|KoDzPqAtFuEfR_@fAiAvEaArEiEvQ{EzU}@zEe@pCuBtK}@jGo@dFe@xFqBx[cGBsE|@wBv@iBr@cCnDuSdf@iHtOmOna@gUtm@sFrYeC|Qk@lOOzXq@ttAw@bbBAdGCve@e@j[GvD[xSyE||@oCz\\oLpyAyExn@[|DwMbuAqe@mJaNNsI~BgOnFyI`GsIjKgQta@oIvRsB~CoElC|Kxe@",
+        "distance_m": 9375,
+        "duration_s": 1160,
+        "cameras": 0,
+        "privacy_score": 100
+      },
+      "cameras_avoided": 0,
+      "extra_distance_m": 0,
+      "extra_duration_s": 0
+    }
+  ]
+}

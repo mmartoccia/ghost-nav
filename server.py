@@ -235,7 +235,7 @@ out body;'''
 
 # ─── Ghost Route core algorithm ────────────────────────────────────────────────
 
-CAMERA_PROXIMITY_M = 50   # Camera "on route" threshold
+CAMERA_PROXIMITY_M = 30   # Camera "on route" threshold — tuned via GHOST-RESEARCH-002 (was 50, optimal=30)
 MAX_ROUTE_RATIO = 2.0      # Ghost must be < 2x fastest distance
 CLUSTER_RADIUS_M = 400     # Cameras within this distance share a cluster
 
@@ -830,6 +830,39 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
                     data = f.read()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/javascript; charset=utf-8')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except FileNotFoundError:
+                self.send_response(404)
+                self.end_headers()
+            return
+
+        # ── PWA: manifest.json ────────────────────────────────────────────────
+        if self.path.split('?')[0] == '/manifest.json':
+            manifest_path = os.path.join(DIR, 'manifest.json')
+            try:
+                with open(manifest_path, 'rb') as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/manifest+json')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except FileNotFoundError:
+                self.send_response(404)
+                self.end_headers()
+            return
+
+        # ── PWA: service worker (must serve from root scope) ──────────────────
+        if self.path.split('?')[0] == '/sw.js':
+            sw_path = os.path.join(DIR, 'sw.js')
+            try:
+                with open(sw_path, 'rb') as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/javascript; charset=utf-8')
+                self.send_header('Service-Worker-Allowed', '/')
                 self.send_header('Content-Length', str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
