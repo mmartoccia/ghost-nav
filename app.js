@@ -337,6 +337,22 @@ function pinIcon(color, letter) {
   });
 }
 
+// ─── User location icon ───────────────────────────────────────────────────────
+
+const userIcon = L.divIcon({
+  html: `<div style="
+    width:20px;height:20px;
+    background:#3b82f6;
+    border:3px solid white;
+    border-radius:50%;
+    box-shadow:0 0 0 3px rgba(59,130,246,0.4);
+  "></div>`,
+  className:   '',
+  iconSize:    [20, 20],
+  iconAnchor:  [10, 10],
+  popupAnchor: [0, -14],
+});
+
 function operatorColor(type) {
   return { police: '#3366cc', government: '#6600cc', private: '#cc6600', unknown: '#888' }[type] || '#888';
 }
@@ -347,11 +363,14 @@ function cameraIcon(cam, bearing) {
   const arrow  = bearing !== null && bearing !== undefined
     ? `<div style="transform:rotate(${bearing}deg);font-size:16px;line-height:1">→</div>`
     : '<div style="font-size:14px;line-height:1">📷</div>';
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const sz = isMobile ? 28 : 20;
+  const anchor = isMobile ? 14 : 10;
   return L.divIcon({
-    html:        `<div style="color:${color};text-shadow:1px 1px 2px black">${arrow}</div>`,
+    html:        `<div style="color:${color};text-shadow:1px 1px 2px black;font-size:${isMobile ? '20px' : '16px'}">${arrow}</div>`,
     className:   '',
-    iconSize:    [20, 20],
-    iconAnchor:  [10, 10],
+    iconSize:    [sz, sz],
+    iconAnchor:  [anchor, anchor],
     popupAnchor: [0, -12],
   });
 }
@@ -2197,6 +2216,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Init commute banner on load
   initCommuteBanner();
+
+  // ── Geolocation: Use My Location ──
+  const useLocationBtn = document.getElementById('use-location');
+  if (useLocationBtn) {
+    useLocationBtn.addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser.');
+        return;
+      }
+      useLocationBtn.textContent = '⏳ Locating…';
+      useLocationBtn.disabled = true;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          useLocationBtn.textContent = '📍 Use My Location';
+          useLocationBtn.disabled = false;
+
+          // Fill start input
+          const startInput = document.getElementById('start-input');
+          startInput.value = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+          startInput.classList.add('has-value');
+
+          // Place user marker on map
+          L.marker([latitude, longitude], { icon: userIcon })
+            .addTo(map)
+            .bindPopup('<div class="popup-title">📍 You are here</div>')
+            .openPopup();
+
+          // Set start coords and pan map
+          placeStartMarker(latitude, longitude);
+          // Override the start input text back (placeStartMarker doesn't touch input)
+          startInput.value = `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+          startInput.classList.add('has-value');
+
+          map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
+          maybeCalculateRoutes();
+        },
+        (err) => {
+          useLocationBtn.textContent = '📍 Use My Location';
+          useLocationBtn.disabled = false;
+          alert('Location access denied or unavailable. Please enable location services.');
+          console.warn('[Geolocation] Error:', err.message);
+        },
+        { timeout: 10000, maximumAge: 60000 }
+      );
+    });
+  }
 
   // Share button — copy the /share OG link (or fall back to current href)
   document.getElementById('share-btn').addEventListener('click', () => {

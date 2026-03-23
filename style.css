@@ -43,6 +43,7 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* dynamic viewport height — collapses mobile browser chrome */
 }
 
 /* ── Top bar ──────────────────────────────────────────── */
@@ -1200,30 +1201,112 @@ html, body {
   to   { transform: translateY(0);     opacity: 1; }
 }
 
+/* ── Location button ──────────────────────────────────── */
+.location-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 14px;
+  min-height: 44px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px dashed rgba(34, 197, 94, 0.35);
+  border-radius: var(--radius);
+  color: var(--accent-green);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.location-btn:hover {
+  background: rgba(34, 197, 94, 0.16);
+  border-color: var(--accent-green);
+  border-style: solid;
+}
+
+.location-btn:active {
+  background: rgba(34, 197, 94, 0.25);
+}
+
 /* ── Responsive ───────────────────────────────────────── */
 @media (max-width: 768px) {
+  #app {
+    height: 100vh;
+    height: 100dvh; /* dynamic viewport height for mobile browsers */
+  }
+
   #main {
     flex-direction: column-reverse;
   }
+
   #map-container {
     flex: 1;
-    min-height: 50vh;
+    min-height: 0;
   }
+
+  #map {
+    height: 100%;
+    height: calc(100dvh - 52px - 50vh); /* fallback handled by flex */
+  }
+
   #side-panel {
-    flex: 0 0 auto;
-    max-height: 50vh;
+    flex: 0 0 50vh;
     min-width: unset;
     border-left: none;
     border-top: 1px solid var(--border);
     overflow-y: auto;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding: 12px;
   }
+
   .brand-tagline { display: none; }
   #map-hint { font-size: 12px; padding: 6px 14px; }
 
-  /* Mobile bottom-sheet style */
-  #side-panel {
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    padding: 12px;
+  /* Touch targets: minimum 48px */
+  .search-input {
+    min-height: 48px;
+    font-size: 16px; /* prevents iOS auto-zoom on focus */
+    padding: 12px 14px;
+  }
+
+  .btn {
+    min-height: 44px;
+    font-size: 15px;
+    padding: 10px 16px;
+  }
+
+  .btn-swap {
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+  }
+
+  .location-btn {
+    min-height: 48px;
+    font-size: 15px;
+  }
+
+  .btn-save-commute,
+  .btn-commute,
+  .btn-commute-clear {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  #report-camera-btn {
+    width: 60px;
+    height: 60px;
+    font-size: 26px;
+    bottom: 20px;
+    right: 16px;
+  }
+
+  /* Larger camera marker tap target on mobile */
+  .leaflet-marker-icon {
+    /* Leaflet markers get a larger virtual tap target via padding */
   }
 }
 
