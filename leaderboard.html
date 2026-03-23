@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ghost — Community Leaderboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: #e5e5e5;
+      font-family: 'Courier New', Courier, monospace;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      border-bottom: 1px solid #1f1f1f;
+      background: #111;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-emoji { font-size: 22px; }
+
+    .brand-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: #22c55e;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .brand-tagline {
+      font-size: 11px;
+      color: #555;
+      display: none;
+    }
+
+    @media (min-width: 500px) {
+      .brand-tagline { display: inline; }
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nav-link {
+      color: #aaa;
+      text-decoration: none;
+      font-size: 13px;
+      padding: 6px 12px;
+      border: 1px solid #2a2a2a;
+      border-radius: 6px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .nav-link:hover {
+      color: #22c55e;
+      border-color: #22c55e;
+    }
+
+    .nav-link.active {
+      color: #22c55e;
+      border-color: #22c55e;
+    }
+
+    /* ── Main ────────────────────────────────────────────────── */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 32px 16px 64px;
+    }
+
+    h1 {
+      font-size: 26px;
+      color: #22c55e;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+
+    .page-subtitle {
+      color: #555;
+      font-size: 13px;
+      margin-bottom: 32px;
+    }
+
+    /* ── Stats bar ───────────────────────────────────────────── */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 36px;
+    }
+
+    .stat-card {
+      background: #111;
+      border: 1px solid #1f1f1f;
+      border-radius: 10px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #22c55e;
+      line-height: 1.1;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #666;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* ── Section titles ──────────────────────────────────────── */
+    .section-title {
+      font-size: 14px;
+      color: #22c55e;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #1f1f1f;
+    }
+
+    /* ── Your stats card ─────────────────────────────────────── */
+    #your-stats {
+      background: #0f1a0f;
+      border: 1px solid #22c55e33;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 36px;
+      display: none;
+    }
+
+    #your-stats .ys-row {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    #your-stats .ys-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    #your-stats .ys-val {
+      font-size: 22px;
+      color: #22c55e;
+      font-weight: 700;
+    }
+
+    #your-stats .ys-lbl {
+      font-size: 11px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* ── Leaderboard table ───────────────────────────────────── */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 10px;
+      border: 1px solid #1f1f1f;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead tr {
+      background: #111;
+      border-bottom: 1px solid #1f1f1f;
+    }
+
+    thead th {
+      padding: 12px 16px;
+      text-align: left;
+      color: #555;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid #141414;
+      transition: background 0.15s;
+    }
+
+    tbody tr:hover {
+      background: #111;
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    tbody tr.you {
+      background: #0f1a0f;
+      border-left: 2px solid #22c55e;
+    }
+
+    tbody td {
+      padding: 11px 16px;
+      color: #ccc;
+    }
+
+    .rank-cell {
+      font-size: 15px;
+      font-weight: 700;
+      width: 48px;
+    }
+
+    .rank-1 { color: #ffd700; }
+    .rank-2 { color: #c0c0c0; }
+    .rank-3 { color: #cd7f32; }
+
+    .name-cell { color: #e5e5e5; }
+    .you-badge {
+      display: inline-block;
+      background: #22c55e22;
+      color: #22c55e;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    .count-cell {
+      color: #22c55e;
+      font-weight: 600;
+    }
+
+    .date-cell {
+      color: #555;
+      font-size: 12px;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: #444;
+    }
+
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-msg  { font-size: 14px; line-height: 1.6; }
+
+    /* ── CTA button ──────────────────────────────────────────── */
+    .cta-wrap {
+      text-align: center;
+      margin-top: 40px;
+    }
+
+    .btn-report {
+      display: inline-block;
+      background: #22c55e;
+      color: #000;
+      font-weight: 700;
+      font-family: inherit;
+      font-size: 14px;
+      padding: 12px 28px;
+      border-radius: 8px;
+      text-decoration: none;
+      letter-spacing: 1px;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .btn-report:hover {
+      background: #16a34a;
+      transform: translateY(-1px);
+    }
+
+    /* ── Loading spinner ─────────────────────────────────────── */
+    .spinner-wrap {
+      text-align: center;
+      padding: 48px;
+      color: #444;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      border: 3px solid #1f1f1f;
+      border-top-color: #22c55e;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+
+    /* ── Error ───────────────────────────────────────────────── */
+    .error-msg {
+      background: #1a0f0f;
+      border: 1px solid #7f1d1d;
+      border-radius: 8px;
+      padding: 14px 18px;
+      color: #f87171;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <span class="brand-emoji">👻</span>
+      <span class="brand-name">Ghost</span>
+      <span class="brand-tagline">privacy-aware navigation</span>
+    </div>
+    <nav>
+      <a href="index.html" class="nav-link">Map</a>
+      <a href="leaderboard.html" class="nav-link active">Leaderboard</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Community Leaderboard</h1>
+    <p class="page-subtitle">Top contributors who help keep Ghost's camera data accurate.</p>
+
+    <!-- Stats bar -->
+    <div class="stats-bar">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-total">—</div>
+        <div class="stat-label">Cameras Reported</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-verified">—</div>
+        <div class="stat-label">Verified</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-reporters">—</div>
+        <div class="stat-label">Active Reporters</div>
+      </div>
+    </div>
+
+    <!-- Your stats (shown if you appear in leaderboard) -->
+    <div id="your-stats">
+      <div class="section-title">Your Stats</div>
+      <div class="ys-row">
+        <div class="ys-item">
+          <span class="ys-val" id="ys-rank">—</span>
+          <span class="ys-lbl">Rank</span>
+        </div>
+        <div class="ys-item">
+          <span class="ys-val" id="ys-reports">—</span>
+          <span class="ys-lbl">Reports</span>
+        </div>
+        <div class="ys-item">
+          <span class="ys-val" id="ys-verified">—</span>
+          <span class="ys-lbl">Verified</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="section-title">Top Reporters</div>
+    <div id="leaderboard-container">
+      <div class="spinner-wrap">
+        <div class="spinner"></div>
+        <div>Loading leaderboard…</div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div class="cta-wrap">
+      <a href="index.html" class="btn-report">📷 Report a Camera</a>
+    </div>
+  </main>
+
+  <script>
+    (async function () {
+      const mySession = localStorage.getItem('ghost_session') || null;
+
+      try {
+        const resp = await fetch('/api/leaderboard');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        const { totals, leaderboard } = data;
+
+        // Fill stats bar
+        document.getElementById('stat-total').textContent     = totals.total_cameras;
+        document.getElementById('stat-verified').textContent  = totals.total_verified;
+        document.getElementById('stat-reporters').textContent = totals.reporters_count;
+
+        // Your stats
+        if (mySession) {
+          const myEntry = leaderboard.find(e => e.session_id === mySession);
+          if (myEntry) {
+            document.getElementById('your-stats').style.display = 'block';
+            document.getElementById('ys-rank').textContent     = '#' + myEntry.rank;
+            document.getElementById('ys-reports').textContent  = myEntry.report_count;
+            document.getElementById('ys-verified').textContent = myEntry.verified_count;
+          }
+        }
+
+        // Render table
+        const container = document.getElementById('leaderboard-container');
+
+        if (!leaderboard || leaderboard.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">📷</div>
+              <div class="empty-msg">No reports yet. Be the first to contribute!</div>
+            </div>`;
+          return;
+        }
+
+        function fmtDate(iso) {
+          if (!iso) return '—';
+          try {
+            const d = new Date(iso);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          } catch { return '—'; }
+        }
+
+        function rankClass(r) {
+          if (r === 1) return 'rank-1';
+          if (r === 2) return 'rank-2';
+          if (r === 3) return 'rank-3';
+          return '';
+        }
+
+        const rows = leaderboard.map(e => {
+          const isYou = mySession && e.session_id === mySession;
+          return `
+            <tr${isYou ? ' class="you"' : ''}>
+              <td class="rank-cell ${rankClass(e.rank)}">#${e.rank}</td>
+              <td class="name-cell">${escHtml(e.display_name)}${isYou ? '<span class="you-badge">you</span>' : ''}</td>
+              <td class="count-cell">${e.report_count}</td>
+              <td class="count-cell">${e.verified_count}</td>
+              <td class="date-cell">${fmtDate(e.first_report_at)}</td>
+            </tr>`;
+        }).join('');
+
+        container.innerHTML = `
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Name</th>
+                  <th>Reports</th>
+                  <th>Verified</th>
+                  <th>Joined</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>`;
+
+      } catch (err) {
+        document.getElementById('leaderboard-container').innerHTML =
+          `<div class="error-msg">⚠️ Failed to load leaderboard: ${escHtml(String(err))}</div>`;
+      }
+
+      function escHtml(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+    })();
+  </script>
+
+</body>
+</html>

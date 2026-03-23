@@ -517,13 +517,21 @@ function showReportForm(lat, lng) {
   });
 
   document.getElementById('report-submit-btn').addEventListener('click', async () => {
+    // Get or generate persistent session_id for contributor tracking
+    let sessionId = localStorage.getItem('ghost_session');
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem('ghost_session', sessionId);
+    }
+
     const payload = {
-      lat:       lat,
-      lon:       lng,
-      type:      document.getElementById('report-type').value,
-      operator:  document.getElementById('report-operator').value,
-      direction: document.getElementById('report-direction').value,
-      notes:     document.getElementById('report-notes').value.trim(),
+      lat:        lat,
+      lon:        lng,
+      type:       document.getElementById('report-type').value,
+      operator:   document.getElementById('report-operator').value,
+      direction:  document.getElementById('report-direction').value,
+      notes:      document.getElementById('report-notes').value.trim(),
+      session_id: sessionId,
     };
 
     const submitBtn = document.getElementById('report-submit-btn');

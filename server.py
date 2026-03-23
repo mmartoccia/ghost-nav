@@ -23,7 +23,48 @@ DIR = os.path.dirname(os.path.abspath(__file__))
 VERSION = '1.0'
 DATA_DIR = os.path.join(DIR, 'data')
 REPORTED_CAMERAS_FILE = os.path.join(DATA_DIR, 'reported_cameras.json')
+REPORTER_STATS_FILE   = os.path.join(DATA_DIR, 'reporter_stats.json')
 GHOST_ADMIN_KEY = os.environ.get('GHOST_ADMIN_KEY', 'ghost-admin-secret')
+
+# ─── Reporter stats helpers ────────────────────────────────────────────────────
+_stats_lock = threading.Lock()
+
+def _load_reporter_stats():
+    """Load reporter stats from disk."""
+    if not os.path.exists(REPORTER_STATS_FILE):
+        return {}
+    try:
+        with open(REPORTER_STATS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_reporter_stats(stats):
+    """Save reporter stats to disk (caller must hold _stats_lock)."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(REPORTER_STATS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(stats, f, indent=2)
+
+def _upsert_reporter_stat(session_id, verified=False):
+    """Thread-safe upsert of reporter stats."""
+    if not session_id:
+        return
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with _stats_lock:
+        stats = _load_reporter_stats()
+        if session_id not in stats:
+            stats[session_id] = {
+                'display_name':   'Anonymous',
+                'report_count':   0,
+                'verified_count': 0,
+                'first_report_at': now_iso,
+                'last_report_at':  now_iso,
+            }
+        stats[session_id]['report_count'] += 1
+        if verified:
+            stats[session_id]['verified_count'] += 1
+        stats[session_id]['last_report_at'] = now_iso
+        _save_reporter_stats(stats)
 
 # ─── Reported cameras helpers ──────────────────────────────────────────────────
 _reported_lock = threading.Lock()
@@ -837,6 +878,10 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
             if direction not in valid_dirs:
                 direction = 'Unknown'
 
+            session_id = str(data.get('session_id', ''))[:64]  # cap length
+            if not session_id:
+                session_id = str(uuid.uuid4())  # anonymous fallback
+
             entry = {
                 'id':           str(uuid.uuid4()),
                 'lat':          lat,
@@ -845,12 +890,14 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
                 'operator':     operator,
                 'direction':    direction,
                 'notes':        notes,
+                'session_id':   session_id,
                 'submitted_at': datetime.now(timezone.utc).isoformat(),
                 'status':       'pending',
             }
 
             _append_reported_camera(entry)
-            print(f'[Report] Camera reported at {lat},{lon} type={cam_type} operator={operator}')
+            _upsert_reporter_stat(session_id)
+            print(f'[Report] Camera reported at {lat},{lon} type={cam_type} operator={operator} session={session_id[:8]}…')
             self._send_json({'status': 'ok', 'message': 'Camera reported, thank you!'})
             return
 
@@ -1149,6 +1196,53 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
                 all_cams = _load_reported_cameras()
             pending = [c for c in all_cams if c.get('status') == 'pending']
             self._send_json({'cameras': pending, 'count': len(pending)})
+            return
+
+        # ── GET /api/leaderboard ──────────────────────────────────────────────
+        if self.path.split('?')[0] == '/api/leaderboard':
+            with _stats_lock:
+                stats = _load_reporter_stats()
+            with _reported_lock:
+                all_cams = _load_reported_cameras()
+
+            # Build sorted leaderboard
+            entries = []
+            for sid, s in stats.items():
+                entries.append({
+                    'session_id':    sid,
+                    'display_name':  s.get('display_name', 'Anonymous'),
+                    'report_count':  s.get('report_count', 0),
+                    'verified_count': s.get('verified_count', 0),
+                    'first_report_at': s.get('first_report_at', ''),
+                    'last_report_at':  s.get('last_report_at', ''),
+                })
+            entries.sort(key=lambda x: x['report_count'], reverse=True)
+            top20 = entries[:20]
+
+            # Add rank and strip session_id from public output
+            ranked = []
+            for i, e in enumerate(top20):
+                ranked.append({
+                    'rank':          i + 1,
+                    'display_name':  e['display_name'],
+                    'report_count':  e['report_count'],
+                    'verified_count': e['verified_count'],
+                    'first_report_at': e['first_report_at'],
+                    'session_id':    e['session_id'],  # needed for "your stats" matching
+                })
+
+            total_cameras  = len(all_cams)
+            total_verified = sum(1 for c in all_cams if c.get('status') == 'confirmed')
+            reporters_count = len(stats)
+
+            self._send_json({
+                'leaderboard': ranked,
+                'totals': {
+                    'total_cameras':  total_cameras,
+                    'total_verified': total_verified,
+                    'reporters_count': reporters_count,
+                },
+            })
             return
 
         if self.path.startswith('/proxy/nominatim?'):

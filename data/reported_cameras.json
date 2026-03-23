@@ -9,5 +9,17 @@
     "notes": "Test camera report",
     "submitted_at": "2026-03-23T10:55:55.376313+00:00",
     "status": "pending"
+  },
+  {
+    "id": "4f26fb07-92ce-4647-a5b5-36646f46ece8",
+    "lat": 33.0185,
+    "lon": -80.1762,
+    "type": "Flock",
+    "operator": "Police",
+    "direction": "N",
+    "notes": "Test camera",
+    "session_id": "test-session-abc-123",
+    "submitted_at": "2026-03-23T17:16:38.046696+00:00",
+    "status": "pending"
   }
 ]
