@@ -1,0 +1,28 @@
+{
+  "A_narrow_alpr": {
+    "total_nodes": 44,
+    "nodes_with_manufacturer_tag": 42,
+    "nodes_with_direction_tag": 43,
+    "score": 43.2
+  },
+  "B_broad_surveillance": {
+    "total_nodes": 54,
+    "nodes_with_manufacturer_tag": 51,
+    "nodes_with_direction_tag": 51,
+    "score": 52.5
+  },
+  "C_alpr_flock_genetec": {
+    "total_nodes": 44,
+    "nodes_with_manufacturer_tag": 42,
+    "nodes_with_direction_tag": 43,
+    "score": 43.2
+  },
+  "D_any_surveillance": {
+    "total_nodes": 21,
+    "nodes_with_manufacturer_tag": 18,
+    "nodes_with_direction_tag": 18,
+    "score": 19.5
+  },
+  "winner": "B_broad_surveillance",
+  "summary": "Best query: B_broad_surveillance with score 52.50 and 54 nodes"
+}

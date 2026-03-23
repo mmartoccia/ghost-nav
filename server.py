@@ -212,9 +212,16 @@ def osrm_route(waypoints):
 OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
 
 def fetch_cameras_in_bbox(min_lat, min_lon, max_lat, max_lon):
-    """Fetch ALPR cameras from Overpass within bbox."""
+    """Fetch ALPR cameras from Overpass within bbox.
+    Query optimized via GHOST-RESEARCH-003: B_broad_surveillance won (54 nodes, score=52.50)
+    vs A_narrow_alpr (44 nodes) — broad query captures more cameras including non-tagged ALPR.
+    """
+    bbox = f"{min_lat:.5f},{min_lon:.5f},{max_lat:.5f},{max_lon:.5f}"
     query = f'''[out:json][timeout:30];
-node["man_made"="surveillance"]["surveillance:type"="ALPR"]({min_lat:.5f},{min_lon:.5f},{max_lat:.5f},{max_lon:.5f});
+(
+  node["man_made"="surveillance"]({bbox});
+  node["surveillance"="camera"]({bbox});
+);
 out body;'''
     body = ('data=' + urllib.parse.quote(query)).encode()
     req = urllib.request.Request(OVERPASS_URL, data=body, headers={
