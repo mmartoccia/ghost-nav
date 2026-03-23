@@ -555,11 +555,13 @@ async function processRoutes(routes) {
   const defaultId = (preferGhost && ghostItem) ? 'ghost' : 'fastest';
   activateRoute(defaultId);
 
-  // ── Encode state into URL hash for sharing ──
+  // ── Encode state into query-string share URL ──
   const startInput = document.getElementById('start-input').value;
   const endInput   = document.getElementById('end-input').value;
   if (startCoords && endCoords) {
-    encodeRouteHash(startInput, endInput, startCoords, endCoords);
+    const camCount     = ghostItem ? ghostItem.cameraHits : fastestCamHits;
+    const savedCount   = ghostItem ? Math.max(0, fastestCamHits - ghostItem.cameraHits) : 0;
+    encodeRouteHash(startInput, endInput, startCoords, endCoords, camCount, savedCount);
     const shareBtn = document.getElementById('share-btn');
     if (shareBtn) shareBtn.classList.remove('hidden');
   }
@@ -1290,35 +1292,74 @@ function clearAll() {
   if (shareBtn) shareBtn.classList.add('hidden');
 }
 
-// ─── Share / URL hash ─────────────────────────────────────────────────────────
+// ─── Share / URL ─────────────────────────────────────────────────────────────
 
 /**
- * Encode current route state into URL hash.
- * Format: base64(JSON({ origin, destination, originCoords, destinationCoords }))
+ * Encode current route state as a query-string /share URL.
+ * Sets window.location.hash for backward compat AND stores the share URL
+ * so the share button can copy it.
+ *
+ * @param {string} originText
+ * @param {string} destinationText
+ * @param {{lat:number,lng:number}} originCoords
+ * @param {{lat:number,lng:number}} destCoords
+ * @param {number} [camCount=0]   - cameras on the displayed route
+ * @param {number} [savedCount=0] - cameras avoided vs. fastest route
  */
-function encodeRouteHash(originText, destinationText, originCoords, destCoords) {
-  const state = {
-    origin:      originText,
-    destination: destinationText,
-    oLat:        originCoords.lat,
-    oLng:        originCoords.lng,
-    dLat:        destCoords.lat,
-    dLng:        destCoords.lng,
-    mode:        'privacy',
-  };
+function encodeRouteHash(originText, destinationText, originCoords, destCoords, camCount = 0, savedCount = 0) {
   try {
-    window.location.hash = btoa(JSON.stringify(state));
+    const params = new URLSearchParams({
+      slat:  originCoords.lat.toFixed(6),
+      slon:  originCoords.lng.toFixed(6),
+      elat:  destCoords.lat.toFixed(6),
+      elon:  destCoords.lng.toFixed(6),
+      cam:   camCount,
+      saved: savedCount,
+    });
+    // Store the shareable /share URL so the share button can copy it
+    const shareUrl = `${window.location.origin}/share?${params.toString()}`;
+    window._ghostShareUrl = shareUrl;
+
+    // Also push a clean query-string state to the browser so the page URL
+    // reflects the route without the ugly hash fragment.
+    const appParams = new URLSearchParams({
+      slat:  originCoords.lat.toFixed(6),
+      slon:  originCoords.lng.toFixed(6),
+      elat:  destCoords.lat.toFixed(6),
+      elon:  destCoords.lng.toFixed(6),
+      cam:   camCount,
+      saved: savedCount,
+    });
+    history.replaceState(null, '', `/?${appParams.toString()}`);
   } catch (e) {
-    console.warn('[Share] Could not encode hash:', e);
+    console.warn('[Share] Could not encode share URL:', e);
   }
 }
 
 /**
- * Decode route state from URL hash if present.
+ * Decode route state from the current page URL.
+ * Supports both:
+ *   - New query-string format: /?slat=X&slon=Y&elat=Z&elon=W&cam=N&saved=M
+ *   - Legacy hash format:      /#<base64(JSON)>
  * Returns parsed state object or null.
  */
 function decodeRouteHash() {
-  const hash = window.location.hash.slice(1); // strip leading '#'
+  // 1. Try query-string params first (new format)
+  const sp = new URLSearchParams(window.location.search);
+  if (sp.get('slat') && sp.get('elat')) {
+    return {
+      origin:      sp.get('origin') || '',
+      destination: sp.get('dest')   || '',
+      oLat:        parseFloat(sp.get('slat')),
+      oLng:        parseFloat(sp.get('slon')),
+      dLat:        parseFloat(sp.get('elat')),
+      dLng:        parseFloat(sp.get('elon')),
+      cam:         parseInt(sp.get('cam')   || '0', 10),
+      saved:       parseInt(sp.get('saved') || '0', 10),
+    };
+  }
+  // 2. Fallback: legacy base64 hash
+  const hash = window.location.hash.slice(1);
   if (!hash) return null;
   try {
     return JSON.parse(atob(hash));
@@ -1929,13 +1970,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Init commute banner on load
   initCommuteBanner();
 
-  // Share button
+  // Share button — copy the /share OG link (or fall back to current href)
   document.getElementById('share-btn').addEventListener('click', () => {
-    navigator.clipboard.writeText(window.location.href)
+    const shareUrl = window._ghostShareUrl || window.location.href;
+    navigator.clipboard.writeText(shareUrl)
       .then(() => showCopyToast())
       .catch(() => {
         // Fallback for browsers without clipboard API
-        prompt('Copy this link:', window.location.href);
+        prompt('Copy this link:', shareUrl);
       });
   });
 

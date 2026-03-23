@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ghost Route: {cameras} cameras avoided</title>
+
+  <!-- Open Graph meta tags -->
+  <meta property="og:type"        content="website">
+  <meta property="og:title"       content="Ghost Route: {cameras} cameras avoided">
+  <meta property="og:description" content="This route avoids {cameras} surveillance cameras. Privacy score: {privacy_score}/100. Navigate off the grid with Ghost.">
+  <meta property="og:image"       content="{base_url}/share-preview.png">
+  <meta property="og:image:width"  content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:url"         content="{share_url}">
+  <meta property="og:site_name"   content="Ghost — Privacy Navigation">
+
+  <!-- Twitter Card meta tags -->
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:site"        content="@ghostnav">
+  <meta name="twitter:title"       content="Ghost Route: {cameras} cameras avoided">
+  <meta name="twitter:description" content="This route avoids {cameras} surveillance cameras. Privacy score: {privacy_score}/100. Navigate off the grid with Ghost.">
+  <meta name="twitter:image"       content="{base_url}/share-preview.png">
+  <meta name="twitter:image:alt"   content="Ghost — Privacy-first navigation">
+
+  <style>
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+
+    body {{
+      background: #0a0a0f;
+      color: #e8e8ff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }}
+
+    .card {{
+      background: linear-gradient(135deg, #12121e 0%, #1a1a2e 100%);
+      border: 1px solid #2a2a4a;
+      border-radius: 20px;
+      padding: 48px;
+      max-width: 560px;
+      width: 100%;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(100,100,200,0.1);
+      text-align: center;
+    }}
+
+    .ghost-logo {{
+      font-size: 72px;
+      line-height: 1;
+      margin-bottom: 8px;
+      filter: drop-shadow(0 0 20px rgba(180,180,255,0.3));
+    }}
+
+    .brand {{
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: #6666aa;
+      margin-bottom: 32px;
+    }}
+
+    .headline {{
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.3;
+      color: #e8e8ff;
+      margin-bottom: 8px;
+    }}
+
+    .headline .cameras-count {{
+      color: #7b7bff;
+      font-size: 40px;
+      display: block;
+    }}
+
+    .subheadline {{
+      font-size: 15px;
+      color: #7777aa;
+      margin-bottom: 36px;
+    }}
+
+    .stats {{
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 36px;
+    }}
+
+    .stat {{
+      background: rgba(100, 100, 200, 0.08);
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 16px 12px;
+    }}
+
+    .stat-value {{
+      font-size: 26px;
+      font-weight: 700;
+      color: #a0a0ff;
+      margin-bottom: 4px;
+    }}
+
+    .stat-label {{
+      font-size: 11px;
+      color: #555577;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }}
+
+    .privacy-bar {{
+      background: #1e1e3a;
+      border-radius: 8px;
+      height: 8px;
+      margin-bottom: 6px;
+      overflow: hidden;
+    }}
+
+    .privacy-fill {{
+      height: 100%;
+      background: linear-gradient(90deg, #4444cc, #8888ff);
+      border-radius: 8px;
+      width: {privacy_score}%;
+      transition: width 0.8s ease;
+    }}
+
+    .privacy-label {{
+      font-size: 12px;
+      color: #555577;
+      margin-bottom: 32px;
+    }}
+
+    .view-btn {{
+      display: inline-block;
+      background: linear-gradient(135deg, #4444bb 0%, #7777ff 100%);
+      color: #fff;
+      text-decoration: none;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 16px 40px;
+      border-radius: 12px;
+      letter-spacing: 0.5px;
+      box-shadow: 0 8px 24px rgba(100,100,255,0.3);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }}
+
+    .view-btn:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(100,100,255,0.4);
+    }}
+
+    .footer {{
+      margin-top: 28px;
+      font-size: 12px;
+      color: #333355;
+    }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="ghost-logo">👻</div>
+    <div class="brand">Ghost Navigation</div>
+
+    <h1 class="headline">
+      This route avoids
+      <span class="cameras-count">{cameras}</span>
+      surveillance camera{cameras_plural}
+    </h1>
+    <p class="subheadline">Navigate with privacy. Open-source. No tracking.</p>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value">{cameras}</div>
+        <div class="stat-label">Cameras avoided</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">{privacy_score}</div>
+        <div class="stat-label">Privacy score</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">{saved}</div>
+        <div class="stat-label">Cameras saved vs direct</div>
+      </div>
+    </div>
+
+    <div class="privacy-bar">
+      <div class="privacy-fill"></div>
+    </div>
+    <div class="privacy-label">Privacy Score: {privacy_score}/100</div>
+
+    <a href="{view_route_url}" class="view-btn">👻 View This Route</a>
+
+    <div class="footer">ghost-nav.limnlabs.com · Privacy-first navigation</div>
+  </div>
+</body>
+</html>

@@ -724,6 +724,89 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        # ── GET /share — route share card with OG meta tags ───────────────────
+        if self.path.startswith('/share'):
+            parsed   = urllib.parse.urlparse(self.path)
+            params   = urllib.parse.parse_qs(parsed.query)
+
+            def _p(key, default=''):
+                vals = params.get(key)
+                return vals[0] if vals else default
+
+            slat  = _p('slat')
+            slon  = _p('slon')
+            elat  = _p('elat')
+            elon  = _p('elon')
+            try:
+                cameras = int(_p('cam', '0'))
+            except ValueError:
+                cameras = 0
+            try:
+                saved = int(_p('saved', '0'))
+            except ValueError:
+                saved = 0
+
+            # Privacy score: 100 at 0 cams, floors at 10
+            privacy_score = max(10, 100 - cameras * 8)
+            cameras_plural = 's' if cameras != 1 else ''
+
+            # Build canonical URLs
+            host = self.headers.get('Host', 'localhost:8766')
+            scheme = 'http'
+            base_url = f'{scheme}://{host}'
+            share_url = f'{base_url}/share?slat={slat}&slon={slon}&elat={elat}&elon={elon}&cam={cameras}&saved={saved}'
+            # View route URL: loads Ghost main page and restores route via query params
+            view_route_url = (
+                f'{base_url}/?slat={slat}&slon={slon}&elat={elat}&elon={elon}'
+                f'&cam={cameras}&saved={saved}'
+            )
+
+            # Render share-card.html template
+            card_path = os.path.join(DIR, 'share-card.html')
+            try:
+                with open(card_path, 'r', encoding='utf-8') as f:
+                    template = f.read()
+            except FileNotFoundError:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(b'share-card.html not found')
+                return
+
+            html = template.format(
+                cameras=cameras,
+                cameras_plural=cameras_plural,
+                privacy_score=privacy_score,
+                saved=saved,
+                base_url=base_url,
+                share_url=share_url,
+                view_route_url=view_route_url,
+            )
+            data = html.encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'public, max-age=300')
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
+        # ── GET /share-preview.png — static OG fallback image ─────────────────
+        if self.path.split('?')[0] == '/share-preview.png':
+            img_path = os.path.join(DIR, 'share-preview.png')
+            try:
+                with open(img_path, 'rb') as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/png')
+                self.send_header('Content-Length', str(len(data)))
+                self.send_header('Cache-Control', 'public, max-age=86400')
+                self.end_headers()
+                self.wfile.write(data)
+            except FileNotFoundError:
+                self.send_response(404)
+                self.end_headers()
+            return
+
         # ── GET /api-docs ─────────────────────────────────────────────────────
         if self.path.split('?')[0] in ('/api-docs', '/api-docs/'):
             docs_path = os.path.join(DIR, 'api-docs.html')
