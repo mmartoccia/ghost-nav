@@ -58,6 +58,16 @@
       </div>
     </div>
 
+    <!-- Camera Alert Banner (shown when new cameras detected on commute) -->
+    <div id="camera-alert-banner" class="hidden">
+      <div class="camera-alert-header">
+        <span class="camera-alert-icon">⚠️</span>
+        <span id="camera-alert-title">New cameras detected on your commute</span>
+        <button id="camera-alert-dismiss" class="btn-dismiss">✕</button>
+      </div>
+      <div id="camera-alert-details" class="camera-alert-details"></div>
+    </div>
+
     <!-- Main content -->
     <div id="main">
       <!-- Map -->
@@ -194,6 +204,35 @@
             <div class="commute-trend-section">
               <span class="commute-stat-label">7-Day Privacy Trend</span>
               <div id="commute-sparkline" class="commute-sparkline"></div>
+            </div>
+
+            <!-- Weekly Summary panel (shown after 7 days) -->
+            <div id="weekly-summary-panel" class="hidden">
+              <div class="weekly-summary-header">
+                <span class="weekly-summary-icon">📅</span>
+                <span class="weekly-summary-title">Weekly Summary</span>
+              </div>
+              <div class="weekly-summary-grid">
+                <div class="weekly-stat-item">
+                  <span class="weekly-stat-label">Surveillance Events This Week</span>
+                  <span id="weekly-stat-events" class="weekly-stat-value">—</span>
+                  <span class="weekly-stat-unit">total camera passes</span>
+                </div>
+                <div class="weekly-stat-item">
+                  <span class="weekly-stat-label">Camera Count Trend</span>
+                  <span id="weekly-stat-trend" class="weekly-stat-value weekly-stat-trend-text">—</span>
+                </div>
+                <div class="weekly-stat-item weekly-stat-wide">
+                  <span class="weekly-stat-label">Ghost Route Savings</span>
+                  <span id="weekly-stat-ghost-savings" class="weekly-stat-value">—</span>
+                  <span class="weekly-stat-unit">cameras avoided daily</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Clear commute data button -->
+            <div class="commute-clear-section">
+              <button id="clear-commute-data-btn" class="btn btn-clear-commute-data">🗑️ Clear commute data</button>
             </div>
           </div>
 

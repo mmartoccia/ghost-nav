@@ -1340,9 +1340,15 @@ function showCopyToast() {
 
 // ─── My Commute ───────────────────────────────────────────────────────────────
 
-const COMMUTE_KEY         = 'ghost_commute';
-const COMMUTE_HISTORY_KEY = 'ghost_commute_history';
-const MAX_COMMUTE_HISTORY = 7;
+const COMMUTE_KEY              = 'ghost_commute';
+const COMMUTE_HISTORY_KEY      = 'ghost_commute_history';
+const MAX_COMMUTE_HISTORY      = 7;
+const COMMUTE_CAMERA_IDS_KEY   = 'ghostCommuteCameraIds';
+const COMMUTE_CAMERA_COUNT_KEY = 'ghostCommuteCameraCount';
+const COMMUTE_SAVED_AT_KEY     = 'ghostCommuteSavedAt';
+const COMMUTE_PAGELOADS_KEY    = 'ghostCommutePageLoads';
+const COMMUTE_PREV_COUNT_KEY   = 'ghostCommutePrevCameraCount';
+const COMMUTE_PREV_WEEK_KEY    = 'ghostCommutePrevWeekSavedAt';
 
 let isCommuteMode = false; // true when current route was loaded from saved commute
 
@@ -1362,7 +1368,7 @@ function loadCommute() {
 /**
  * Save current origin/destination as "My Commute".
  */
-function saveCommute() {
+async function saveCommute() {
   const commute = {
     home:     { ...startCoords },
     work:     { ...endCoords },
@@ -1377,6 +1383,215 @@ function saveCommute() {
   // flash confirm
   setHint('🏠 Commute saved! It will appear on your next visit.');
   setTimeout(() => setHint('✅ Routes calculated — click a route to highlight'), 2500);
+
+  // Store camera fingerprint for future diff comparisons
+  await storeCommuteCameraFingerprint(commute);
+}
+
+/**
+ * Fetch cameras for a commute route and store fingerprint in localStorage.
+ * @param {object} commute - saved commute with home/work coords
+ */
+async function storeCommuteCameraFingerprint(commute) {
+  try {
+    const routeCams = await fetchCamerasForCommute(commute);
+    const ids = routeCams.map(c => c.id).sort();
+    localStorage.setItem(COMMUTE_CAMERA_IDS_KEY,   JSON.stringify(ids));
+    localStorage.setItem(COMMUTE_CAMERA_COUNT_KEY, String(ids.length));
+    localStorage.setItem(COMMUTE_SAVED_AT_KEY,     new Date().toISOString());
+    console.log('[Commute] Camera fingerprint stored:', ids.length, 'cameras');
+  } catch (err) {
+    console.warn('[Commute] Failed to store camera fingerprint:', err);
+  }
+}
+
+/**
+ * Fetch ALPR cameras along the bounding box of a home→work commute.
+ * @param {object} commute - { home: {lat,lng}, work: {lat,lng} }
+ * @returns {Array} camera objects
+ */
+async function fetchCamerasForCommute(commute) {
+  const { home, work } = commute;
+  const minLat = Math.min(home.lat, work.lat) - 0.02;
+  const maxLat = Math.max(home.lat, work.lat) + 0.02;
+  const minLon = Math.min(home.lng, work.lng) - 0.02;
+  const maxLon = Math.max(home.lng, work.lng) + 0.02;
+
+  const query = `[out:json][timeout:30];
+node["man_made"="surveillance"]["surveillance:type"="ALPR"](${minLat.toFixed(5)},${minLon.toFixed(5)},${maxLat.toFixed(5)},${maxLon.toFixed(5)});
+out body;`;
+
+  const resp = await fetch(OVERPASS_URL, {
+    method:  'POST',
+    body:    'data=' + encodeURIComponent(query),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!resp.ok) throw new Error(`Overpass HTTP ${resp.status}`);
+  const data = await resp.json();
+  return (data.elements || []).map(el => ({
+    lat:      el.lat,
+    lon:      el.lon,
+    id:       el.id,
+    tags:     el.tags || {},
+    operator: el.tags?.operator || el.tags?.['operator:short'] || null,
+  }));
+}
+
+/**
+ * On page load: diff current cameras against stored fingerprint.
+ * Shows alert banner if new cameras are detected.
+ * Updates fingerprint + page load counter.
+ */
+async function runCommuteCameraDiff(commute) {
+  const storedIdsRaw = localStorage.getItem(COMMUTE_CAMERA_IDS_KEY);
+  if (!storedIdsRaw) {
+    // No fingerprint yet — store one now
+    await storeCommuteCameraFingerprint(commute);
+    return;
+  }
+
+  let storedIds;
+  try {
+    storedIds = JSON.parse(storedIdsRaw);
+  } catch (e) {
+    storedIds = [];
+  }
+
+  // Increment page load counter
+  const loads = parseInt(localStorage.getItem(COMMUTE_PAGELOADS_KEY) || '0', 10) + 1;
+  localStorage.setItem(COMMUTE_PAGELOADS_KEY, String(loads));
+
+  try {
+    const freshCams = await fetchCamerasForCommute(commute);
+    const freshIds  = new Set(freshCams.map(c => c.id));
+    const storedSet = new Set(storedIds);
+
+    const newIds = [...freshIds].filter(id => !storedSet.has(id));
+
+    if (newIds.length > 0) {
+      const newCams = freshCams.filter(c => newIds.includes(c.id));
+      const savedAt = localStorage.getItem(COMMUTE_SAVED_AT_KEY);
+      const savedDate = savedAt ? new Date(savedAt).toLocaleDateString() : 'last check';
+      showCameraAlertBanner(newCams, savedDate);
+    }
+
+    // Update fingerprint
+    const allIds = [...freshIds].sort();
+    localStorage.setItem(COMMUTE_CAMERA_IDS_KEY,   JSON.stringify(allIds));
+    localStorage.setItem(COMMUTE_CAMERA_COUNT_KEY, String(allIds.length));
+    localStorage.setItem(COMMUTE_SAVED_AT_KEY,     new Date().toISOString());
+
+  } catch (err) {
+    console.warn('[Commute] Camera diff failed:', err);
+  }
+}
+
+/**
+ * Show the camera alert banner when new cameras are detected.
+ * @param {Array} newCams - array of new camera objects
+ * @param {string} sinceDate - human-readable date of last fingerprint
+ */
+function showCameraAlertBanner(newCams, sinceDate) {
+  const banner  = document.getElementById('camera-alert-banner');
+  const title   = document.getElementById('camera-alert-title');
+  const details = document.getElementById('camera-alert-details');
+
+  if (!banner) return;
+
+  title.textContent = `⚠️ ${newCams.length} new camera${newCams.length !== 1 ? 's' : ''} detected on your commute since ${sinceDate}`;
+
+  details.innerHTML = newCams.map(cam => {
+    const op  = cam.operator || cam.tags?.operator || cam.tags?.['operator:short'] || 'Unknown operator';
+    const lat = cam.lat.toFixed(5);
+    const lon = cam.lon.toFixed(5);
+    return `<div class="camera-alert-item">
+      📷 <strong>${escHtml(op)}</strong> — ${lat}, ${lon}
+      <a href="https://osm.org/node/${cam.id}" target="_blank" class="camera-alert-link">OSM ↗</a>
+    </div>`;
+  }).join('');
+
+  banner.classList.remove('hidden');
+
+  document.getElementById('camera-alert-dismiss').onclick = () => {
+    banner.classList.add('hidden');
+  };
+}
+
+/**
+ * Render the Weekly Summary panel (shown after 7+ days of data).
+ * @param {object} fastestItem - fastest route item
+ * @param {object|null} ghostItem - ghost route item
+ */
+function renderWeeklySummary(fastestItem, ghostItem) {
+  const panel = document.getElementById('weekly-summary-panel');
+  if (!panel) return;
+
+  let history = [];
+  try {
+    const raw = localStorage.getItem(COMMUTE_HISTORY_KEY);
+    history = raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    history = [];
+  }
+
+  // Show panel if we have 7 days of history OR if we're testing (mock mode)
+  const hasFullWeek = history.length >= MAX_COMMUTE_HISTORY;
+  // Allow override for testing: ?weekly=1 in URL or localStorage.ghostWeeklyTest=1
+  const testMode = new URLSearchParams(window.location.search).get('weekly') === '1'
+    || localStorage.getItem('ghostWeeklyTest') === '1';
+
+  if (!hasFullWeek && !testMode) {
+    panel.classList.add('hidden');
+    return;
+  }
+
+  panel.classList.remove('hidden');
+
+  // Total surveillance events this week: sum of (cameras * page loads per day)
+  const pageLoads  = parseInt(localStorage.getItem(COMMUTE_PAGELOADS_KEY) || '1', 10);
+  const camCount   = parseInt(localStorage.getItem(COMMUTE_CAMERA_COUNT_KEY) || '0', 10);
+  const weekEvents = hasFullWeek
+    ? history.reduce((sum, h) => sum + Math.round((100 - h.score) / 8), 0) // reverse-engineer cam count from score
+    : pageLoads * camCount;
+  document.getElementById('weekly-stat-events').textContent = weekEvents;
+
+  // Camera count trend
+  const prevCount = parseInt(localStorage.getItem(COMMUTE_PREV_COUNT_KEY) || '0', 10);
+  const trendEl   = document.getElementById('weekly-stat-trend');
+  const delta     = camCount - prevCount;
+  if (prevCount === 0) {
+    trendEl.textContent = 'No previous data';
+    trendEl.style.color = '#8b949e';
+  } else if (delta > 0) {
+    trendEl.textContent = `▲ Up ${delta} camera${delta !== 1 ? 's' : ''} since last week`;
+    trendEl.style.color = '#ef4444';
+  } else if (delta < 0) {
+    trendEl.textContent = `▼ Down ${Math.abs(delta)} camera${Math.abs(delta) !== 1 ? 's' : ''} since last week`;
+    trendEl.style.color = '#22c55e';
+  } else {
+    trendEl.textContent = '✓ No change since last week';
+    trendEl.style.color = '#22c55e';
+  }
+
+  // Ghost route savings
+  const ghostSavingsEl = document.getElementById('weekly-stat-ghost-savings');
+  if (ghostItem && fastestItem) {
+    const saved = Math.max(0, fastestItem.cameraHits - ghostItem.cameraHits);
+    ghostSavingsEl.textContent = saved;
+    ghostSavingsEl.nextElementSibling && (ghostSavingsEl.nextElementSibling.textContent =
+      `cameras avoided daily (${saved * 5} this week)`);
+  } else {
+    ghostSavingsEl.textContent = '—';
+  }
+
+  // Store current count as prev (for next week comparison) — only once per week
+  const prevWeekSavedAt = localStorage.getItem(COMMUTE_PREV_WEEK_KEY);
+  const now = Date.now();
+  const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
+  if (!prevWeekSavedAt || (now - parseInt(prevWeekSavedAt, 10)) > oneWeekMs) {
+    localStorage.setItem(COMMUTE_PREV_COUNT_KEY, String(camCount));
+    localStorage.setItem(COMMUTE_PREV_WEEK_KEY,  String(now));
+  }
 }
 
 /**
@@ -1385,10 +1600,26 @@ function saveCommute() {
 function clearCommute() {
   localStorage.removeItem(COMMUTE_KEY);
   localStorage.removeItem(COMMUTE_HISTORY_KEY);
+  clearCommuteMonitoringData();
   isCommuteMode = false;
   document.getElementById('commute-banner').classList.add('hidden');
   document.getElementById('commute-stats-panel').classList.add('hidden');
+  document.getElementById('camera-alert-banner').classList.add('hidden');
   document.getElementById('save-commute-row').classList.remove('hidden');
+}
+
+/**
+ * Clear all commute monitoring/fingerprint data from localStorage.
+ * Used by both clearCommute() and the "Clear commute data" button.
+ */
+function clearCommuteMonitoringData() {
+  localStorage.removeItem(COMMUTE_CAMERA_IDS_KEY);
+  localStorage.removeItem(COMMUTE_CAMERA_COUNT_KEY);
+  localStorage.removeItem(COMMUTE_SAVED_AT_KEY);
+  localStorage.removeItem(COMMUTE_PAGELOADS_KEY);
+  localStorage.removeItem(COMMUTE_PREV_COUNT_KEY);
+  localStorage.removeItem(COMMUTE_PREV_WEEK_KEY);
+  console.log('[Commute] Monitoring data cleared');
 }
 
 /**
@@ -1484,6 +1715,28 @@ function updateCommuteStats(fastestItem, ghostItem, altItems) {
   // Render sparkline
   renderSparkline();
 
+  // Render weekly summary (shown after 7 days)
+  renderWeeklySummary(fastestItem, ghostItem);
+
+  // Wire up the "Clear commute data" button
+  const clearDataBtn = document.getElementById('clear-commute-data-btn');
+  if (clearDataBtn) {
+    clearDataBtn.onclick = () => {
+      clearCommuteMonitoringData();
+      localStorage.removeItem(COMMUTE_HISTORY_KEY);
+      document.getElementById('camera-alert-banner').classList.add('hidden');
+      document.getElementById('weekly-summary-panel').classList.add('hidden');
+      document.getElementById('commute-sparkline').innerHTML =
+        '<span class="sparkline-empty">Data cleared — run your commute daily to rebuild trend.</span>';
+      clearDataBtn.textContent = '✓ Cleared';
+      clearDataBtn.disabled = true;
+      setTimeout(() => {
+        clearDataBtn.textContent = '🗑️ Clear commute data';
+        clearDataBtn.disabled = false;
+      }, 2000);
+    };
+  }
+
   // Update banner with camera count
   const commute = loadCommute();
   if (commute) {
@@ -1574,6 +1827,7 @@ function renderSparkline() {
 
 /**
  * Check on page load if a commute is saved, and show the banner.
+ * Also runs camera diff to detect new cameras since last visit.
  */
 function initCommuteBanner() {
   const commute = loadCommute();
@@ -1588,6 +1842,11 @@ function initCommuteBanner() {
   document.getElementById('commute-clear-btn').addEventListener('click', () => {
     clearCommute();
   });
+
+  // Run camera diff in background (non-blocking)
+  runCommuteCameraDiff(commute).catch(err =>
+    console.warn('[Commute] Background diff error:', err)
+  );
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
