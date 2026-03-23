@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ghost Nav API Docs</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0a;
+      --surface:   #111111;
+      --border:    #1e1e1e;
+      --green:     #22c55e;
+      --green-dim: #16a34a;
+      --text:      #e5e7eb;
+      --muted:     #6b7280;
+      --code-bg:   #0d0d0d;
+      --error:     #ef4444;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 2rem 1.5rem 1.5rem;
+      background: linear-gradient(180deg, #0f0f0f 0%, var(--bg) 100%);
+    }
+    .header-inner {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .ghost-icon {
+      font-size: 1.75rem;
+      line-height: 1;
+    }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #fff;
+    }
+    h1 span { color: var(--green); }
+    .badge {
+      display: inline-block;
+      background: rgba(34,197,94,0.12);
+      border: 1px solid rgba(34,197,94,0.3);
+      color: var(--green);
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      padding: 0.15em 0.55em;
+      border-radius: 999px;
+      text-transform: uppercase;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+    }
+    .header-desc {
+      color: var(--muted);
+      max-width: 620px;
+      font-size: 0.95rem;
+    }
+    .base-url {
+      display: inline-block;
+      margin-top: 0.75rem;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.35em 0.75em;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.82rem;
+      color: var(--green);
+    }
+
+    /* ── Nav ── */
+    nav {
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      background: var(--surface);
+    }
+    .nav-inner {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      gap: 1.5rem;
+    }
+    nav a {
+      display: inline-block;
+      padding: 0.75rem 0;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    nav a:hover { color: var(--text); }
+    nav a.active { color: var(--green); border-bottom-color: var(--green); }
+
+    /* ── Main layout ── */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    /* ── Section ── */
+    .endpoint-section {
+      margin-bottom: 3rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .endpoint-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem 1.25rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .method-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.25em 0.6em;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .method-post { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+    .method-get  { background: rgba(59,130,246,0.15); color: #60a5fa;    border: 1px solid rgba(59,130,246,0.3); }
+    .endpoint-path {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+      color: #fff;
+      font-weight: 600;
+    }
+    .endpoint-body { padding: 1.25rem; }
+
+    .endpoint-desc {
+      color: var(--muted);
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+    }
+
+    /* ── Params table ── */
+    h3 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+      font-weight: 600;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+    }
+    th {
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    .param-name {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--green);
+      font-size: 0.85rem;
+    }
+    .param-type {
+      font-family: 'JetBrains Mono', monospace;
+      color: #f59e0b;
+      font-size: 0.8rem;
+    }
+    .param-req {
+      font-size: 0.7rem;
+      padding: 0.1em 0.45em;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .req  { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+    .opt  { background: rgba(107,114,128,0.15); color: var(--muted); border: 1px solid rgba(107,114,128,0.3); }
+
+    /* ── Try It form ── */
+    .try-it {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .try-it h3 { margin-bottom: 1rem; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .form-group label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+      font-weight: 500;
+    }
+    .form-group input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 0.45rem 0.65rem;
+      font-size: 0.875rem;
+      font-family: 'JetBrains Mono', monospace;
+      transition: border-color 0.15s;
+      outline: none;
+    }
+    .form-group input:focus { border-color: var(--green); }
+
+    .try-btn {
+      background: var(--green);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      padding: 0.55rem 1.25rem;
+      font-size: 0.875rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      letter-spacing: 0.02em;
+    }
+    .try-btn:hover  { background: #16a34a; }
+    .try-btn:active { transform: scale(0.97); }
+    .try-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* ── Response block ── */
+    .response-block {
+      margin-top: 1rem;
+      display: none;
+    }
+    .response-block.visible { display: block; }
+    .response-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+    }
+    .response-block pre {
+      background: #050505;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      color: #a3e635;
+      max-height: 340px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .response-block pre.error { color: var(--error); }
+
+    /* ── Code Examples (collapsible) ── */
+    details {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    summary {
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--muted);
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      user-select: none;
+      transition: color 0.15s;
+    }
+    summary:hover { color: var(--text); }
+    summary::before { content: '▶'; font-size: 0.65rem; transition: transform 0.2s; }
+    details[open] summary::before { transform: rotate(90deg); }
+
+    .code-tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--code-bg);
+      overflow-x: auto;
+    }
+    .code-tab {
+      padding: 0.5rem 1rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .code-tab:hover { color: var(--text); }
+    .code-tab.active { color: var(--green); border-bottom-color: var(--green); }
+    .code-panel {
+      display: none;
+      background: var(--code-bg);
+      padding: 1rem;
+    }
+    .code-panel.active { display: block; }
+    .code-panel pre {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      line-height: 1.65;
+      color: #d1fae5;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    /* syntax tint */
+    .kw  { color: #818cf8; }
+    .str { color: #a3e635; }
+    .num { color: #fb923c; }
+    .cmt { color: #4b5563; }
+    .fn  { color: #60a5fa; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    footer a { color: var(--green); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo-row">
+      <span class="ghost-icon">👻</span>
+      <h1>Ghost Nav <span>API</span> <span class="badge">v1</span></h1>
+    </div>
+    <p class="header-desc">
+      Privacy-first routing engine that calculates camera-avoidance routes and surveillance density scores.
+      All endpoints return JSON. CORS is open — call from any origin.
+    </p>
+    <div class="base-url">Base URL: <span id="base-url-display"></span></div>
+  </div>
+</header>
+
+<nav>
+  <div class="nav-inner">
+    <a href="#route" class="active">POST /route</a>
+    <a href="#score">GET /score</a>
+    <a href="/">← Back to App</a>
+  </div>
+</nav>
+
+<main>
+
+  <!-- ═══════════════════════════════════════════════════════
+       ENDPOINT 1: POST /api/v1/route
+  ════════════════════════════════════════════════════════════ -->
+  <div class="endpoint-section" id="route">
+    <div class="endpoint-header">
+      <span class="method-badge method-post">POST</span>
+      <span class="endpoint-path">/api/v1/route</span>
+    </div>
+    <div class="endpoint-body">
+      <p class="endpoint-desc">
+        Compute a privacy-optimized "ghost" route between two coordinates. Returns both the fastest route
+        and a camera-avoidance route, including geometry, distance, duration, camera counts, and a privacy score.
+        The ghost algorithm uses OSRM alternatives + geometric cluster bypasses to minimize ALPR camera exposure.
+      </p>
+
+      <h3>Request Body (JSON)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Required</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">start</span></td>
+            <td><span class="param-type">[lat, lon]</span></td>
+            <td><span class="param-req req">required</span></td>
+            <td>Origin as <code>[latitude, longitude]</code> array</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">end</span></td>
+            <td><span class="param-type">[lat, lon]</span></td>
+            <td><span class="param-req req">required</span></td>
+            <td>Destination as <code>[latitude, longitude]</code> array</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">mode</span></td>
+            <td><span class="param-type">string</span></td>
+            <td><span class="param-req opt">optional</span></td>
+            <td><code>fastest</code> | <code>ghost</code> | <code>both</code> (default: <code>both</code>)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Try It -->
+      <div class="try-it">
+        <h3>⚡ Try It</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Start Lat</label>
+            <input type="number" id="r-start-lat" step="any" value="33.0185" placeholder="33.0185" />
+          </div>
+          <div class="form-group">
+            <label>Start Lon</label>
+            <input type="number" id="r-start-lon" step="any" value="-80.1786" placeholder="-80.1786" />
+          </div>
+          <div class="form-group">
+            <label>End Lat</label>
+            <input type="number" id="r-end-lat" step="any" value="32.8986" placeholder="32.8986" />
+          </div>
+          <div class="form-group">
+            <label>End Lon</label>
+            <input type="number" id="r-end-lon" step="any" value="-80.0407" placeholder="-80.0407" />
+          </div>
+        </div>
+        <p style="font-size:0.75rem; color: var(--muted); margin-bottom: 0.75rem;">
+          Pre-filled: Summerville, SC → Charleston International Airport
+        </p>
+        <button class="try-btn" id="route-btn" onclick="tryRoute()">Try It →</button>
+        <div class="response-block" id="route-response">
+          <div class="response-label">Response</div>
+          <pre id="route-pre"></pre>
+        </div>
+      </div>
+
+      <!-- Code Examples -->
+      <details>
+        <summary>Code Examples</summary>
+        <div class="code-tabs">
+          <button class="code-tab active" onclick="switchTab('route','curl')">curl</button>
+          <button class="code-tab" onclick="switchTab('route','python')">Python</button>
+          <button class="code-tab" onclick="switchTab('route','js')">JavaScript</button>
+        </div>
+        <div id="route-curl" class="code-panel active">
+          <pre><span class="fn">curl</span> -X POST \
+  <span class="str">"http://localhost:8766/api/v1/route"</span> \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -d <span class="str">'{
+    "start": [33.0185, -80.1786],
+    "end":   [32.8986, -80.0407],
+    "mode":  "both"
+  }'</span></pre>
+        </div>
+        <div id="route-python" class="code-panel">
+          <pre><span class="kw">import</span> requests
+
+resp = requests.<span class="fn">post</span>(
+    <span class="str">"http://localhost:8766/api/v1/route"</span>,
+    json={
+        <span class="str">"start"</span>: [<span class="num">33.0185</span>, <span class="num">-80.1786</span>],
+        <span class="str">"end"</span>:   [<span class="num">32.8986</span>, <span class="num">-80.0407</span>],
+        <span class="str">"mode"</span>:  <span class="str">"both"</span>
+    }
+)
+data = resp.<span class="fn">json</span>()
+<span class="fn">print</span>(<span class="str">f"Privacy score: {data['ghost']['privacy_score']}"</span>)
+<span class="fn">print</span>(<span class="str">f"Cameras avoided: {data['cameras_avoided']}"</span>)</pre>
+        </div>
+        <div id="route-js" class="code-panel">
+          <pre><span class="kw">const</span> resp = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">'/api/v1/route'</span>, {
+  method: <span class="str">'POST'</span>,
+  headers: { <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span> },
+  body: <span class="fn">JSON.stringify</span>({
+    start: [<span class="num">33.0185</span>, <span class="num">-80.1786</span>],
+    end:   [<span class="num">32.8986</span>, <span class="num">-80.0407</span>],
+    mode:  <span class="str">'both'</span>
+  })
+});
+<span class="kw">const</span> data = <span class="kw">await</span> resp.<span class="fn">json</span>();
+console.<span class="fn">log</span>(<span class="str">'Privacy score:'</span>, data.ghost.privacy_score);
+console.<span class="fn">log</span>(<span class="str">'Cameras avoided:'</span>, data.cameras_avoided);</pre>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════
+       ENDPOINT 2: GET /api/v1/score
+  ════════════════════════════════════════════════════════════ -->
+  <div class="endpoint-section" id="score">
+    <div class="endpoint-header">
+      <span class="method-badge method-get">GET</span>
+      <span class="endpoint-path">/api/v1/score</span>
+    </div>
+    <div class="endpoint-body">
+      <p class="endpoint-desc">
+        Get the surveillance density and privacy score for a geographic area. Returns the number of ALPR
+        cameras within the specified radius, camera density per km², and a 0–100 privacy score.
+        Useful for assessing a neighbourhood's surveillance exposure before routing.
+      </p>
+
+      <h3>Query Parameters</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Required</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="param-name">lat</span></td>
+            <td><span class="param-type">float</span></td>
+            <td><span class="param-req req">required</span></td>
+            <td>Center latitude of search area</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">lon</span></td>
+            <td><span class="param-type">float</span></td>
+            <td><span class="param-req req">required</span></td>
+            <td>Center longitude of search area</td>
+          </tr>
+          <tr>
+            <td><span class="param-name">radius_m</span></td>
+            <td><span class="param-type">float</span></td>
+            <td><span class="param-req opt">optional</span></td>
+            <td>Search radius in metres. Default: <code>1000</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Try It -->
+      <div class="try-it">
+        <h3>⚡ Try It</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Lat</label>
+            <input type="number" id="s-lat" step="any" value="33.0185" placeholder="33.0185" />
+          </div>
+          <div class="form-group">
+            <label>Lon</label>
+            <input type="number" id="s-lon" step="any" value="-80.1786" placeholder="-80.1786" />
+          </div>
+          <div class="form-group">
+            <label>Radius (m)</label>
+            <input type="number" id="s-radius" step="any" value="1000" placeholder="1000" />
+          </div>
+        </div>
+        <p style="font-size:0.75rem; color: var(--muted); margin-bottom: 0.75rem;">
+          Pre-filled: Summerville, SC — 1 km radius
+        </p>
+        <button class="try-btn" id="score-btn" onclick="tryScore()">Try It →</button>
+        <div class="response-block" id="score-response">
+          <div class="response-label">Response</div>
+          <pre id="score-pre"></pre>
+        </div>
+      </div>
+
+      <!-- Code Examples -->
+      <details>
+        <summary>Code Examples</summary>
+        <div class="code-tabs">
+          <button class="code-tab active" onclick="switchTab('score','curl')">curl</button>
+          <button class="code-tab" onclick="switchTab('score','python')">Python</button>
+          <button class="code-tab" onclick="switchTab('score','js')">JavaScript</button>
+        </div>
+        <div id="score-curl" class="code-panel active">
+          <pre><span class="fn">curl</span> <span class="str">"http://localhost:8766/api/v1/score?lat=33.0185&lon=-80.1786&radius_m=1000"</span></pre>
+        </div>
+        <div id="score-python" class="code-panel">
+          <pre><span class="kw">import</span> requests
+
+resp = requests.<span class="fn">get</span>(
+    <span class="str">"http://localhost:8766/api/v1/score"</span>,
+    params={<span class="str">"lat"</span>: <span class="num">33.0185</span>, <span class="str">"lon"</span>: <span class="num">-80.1786</span>, <span class="str">"radius_m"</span>: <span class="num">1000</span>}
+)
+data = resp.<span class="fn">json</span>()
+<span class="fn">print</span>(<span class="str">f"Privacy score: {data['privacy_score']}/100"</span>)
+<span class="fn">print</span>(<span class="str">f"Cameras nearby: {data['camera_count']}"</span>)
+<span class="fn">print</span>(<span class="str">f"Density: {data['surveillance_density']} cameras/km²"</span>)</pre>
+        </div>
+        <div id="score-js" class="code-panel">
+          <pre><span class="kw">const</span> params = <span class="kw">new</span> <span class="fn">URLSearchParams</span>({
+  lat: <span class="num">33.0185</span>, lon: <span class="num">-80.1786</span>, radius_m: <span class="num">1000</span>
+});
+<span class="kw">const</span> resp = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">`/api/v1/score?${params}`</span>);
+<span class="kw">const</span> data = <span class="kw">await</span> resp.<span class="fn">json</span>();
+console.<span class="fn">log</span>(<span class="str">`Privacy score: ${data.privacy_score}/100`</span>);
+console.<span class="fn">log</span>(<span class="str">`Cameras: ${data.camera_count}`</span>);</pre>
+        </div>
+      </details>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <a href="/">← Ghost Nav</a> &nbsp;·&nbsp; Ghost Nav API v1 &nbsp;·&nbsp; Data sourced from OpenStreetMap via Overpass API
+</footer>
+
+<script>
+  // ── Display base URL ────────────────────────────────────────────────────────
+  document.getElementById('base-url-display').textContent = window.location.origin;
+
+  // ── Nav active state on scroll ───────────────────────────────────────────────
+  const navLinks = document.querySelectorAll('nav a[href^="#"]');
+  function updateNav() {
+    const scrollY = window.scrollY + 100;
+    let active = null;
+    for (const el of ['route', 'score']) {
+      const sec = document.getElementById(el);
+      if (sec && sec.offsetTop <= scrollY) active = el;
+    }
+    navLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + active);
+    });
+  }
+  window.addEventListener('scroll', updateNav, { passive: true });
+
+  // ── Code tab switcher ────────────────────────────────────────────────────────
+  function switchTab(endpoint, lang) {
+    const section = document.getElementById(endpoint);
+    // Find within this section only
+    const panels = section.querySelectorAll('.code-panel');
+    const tabs   = section.querySelectorAll('.code-tab');
+    panels.forEach(p => p.classList.remove('active'));
+    tabs.forEach(t => t.classList.remove('active'));
+    const panel = section.querySelector('#' + endpoint + '-' + lang);
+    if (panel) panel.classList.add('active');
+    // Activate the clicked tab
+    tabs.forEach(t => {
+      if (t.textContent.toLowerCase().trim() === langLabel(lang)) t.classList.add('active');
+    });
+  }
+  function langLabel(lang) {
+    return { curl: 'curl', python: 'python', js: 'javascript' }[lang] || lang;
+  }
+
+  // ── Route endpoint ──────────────────────────────────────────────────────────
+  async function tryRoute() {
+    const btn = document.getElementById('route-btn');
+    const pre = document.getElementById('route-pre');
+    const block = document.getElementById('route-response');
+
+    const startLat = parseFloat(document.getElementById('r-start-lat').value);
+    const startLon = parseFloat(document.getElementById('r-start-lon').value);
+    const endLat   = parseFloat(document.getElementById('r-end-lat').value);
+    const endLon   = parseFloat(document.getElementById('r-end-lon').value);
+
+    if ([startLat, startLon, endLat, endLon].some(isNaN)) {
+      showError(pre, block, 'All four coordinate fields are required.');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    pre.className = '';
+    block.classList.add('visible');
+    pre.textContent = '// Fetching route (this may take 3–10 s while OSRM + Overpass are queried)…';
+
+    try {
+      const resp = await fetch(window.location.origin + '/api/v1/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          start: [startLat, startLon],
+          end:   [endLat, endLon],
+          mode:  'both'
+        })
+      });
+      const data = await resp.json();
+      pre.textContent = JSON.stringify(data, null, 2);
+      pre.className = resp.ok ? '' : 'error';
+    } catch (err) {
+      showError(pre, block, err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Try It →';
+    }
+  }
+
+  // ── Score endpoint ──────────────────────────────────────────────────────────
+  async function tryScore() {
+    const btn = document.getElementById('score-btn');
+    const pre = document.getElementById('score-pre');
+    const block = document.getElementById('score-response');
+
+    const lat    = parseFloat(document.getElementById('s-lat').value);
+    const lon    = parseFloat(document.getElementById('s-lon').value);
+    const radius = parseFloat(document.getElementById('s-radius').value) || 1000;
+
+    if (isNaN(lat) || isNaN(lon)) {
+      showError(pre, block, 'lat and lon are required.');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    pre.className = '';
+    block.classList.add('visible');
+    pre.textContent = '// Querying Overpass for nearby ALPR cameras…';
+
+    try {
+      const url = `/api/v1/score?lat=${lat}&lon=${lon}&radius_m=${radius}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      pre.textContent = JSON.stringify(data, null, 2);
+      pre.className = resp.ok ? '' : 'error';
+    } catch (err) {
+      showError(pre, block, err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Try It →';
+    }
+  }
+
+  function showError(pre, block, msg) {
+    block.classList.add('visible');
+    pre.className = 'error';
+    pre.textContent = '// Error: ' + msg;
+  }
+</script>
+</body>
+</html>

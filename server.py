@@ -717,6 +717,22 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        # ── GET /api-docs ─────────────────────────────────────────────────────
+        if self.path.split('?')[0] in ('/api-docs', '/api-docs/'):
+            docs_path = os.path.join(DIR, 'api-docs.html')
+            try:
+                with open(docs_path, 'rb') as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except FileNotFoundError:
+                self.send_response(404)
+                self.end_headers()
+            return
+
         # ── GET /api/v1/health ────────────────────────────────────────────────
         if self.path == '/api/v1/health':
             self._send_json({
