@@ -1,0 +1,13 @@
+{
+  "name": "@ghost-nav/sdk",
+  "version": "0.1.0",
+  "description": "Ghost Nav privacy routing SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
