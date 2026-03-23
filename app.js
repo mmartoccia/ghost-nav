@@ -42,6 +42,11 @@ let routeLayers    = [];   // { id, layer, type, rank }
 let activeRouteId  = null;
 let preferGhost    = localStorage.getItem('ghost-prefer-ghost') === 'true';
 
+// ─── Report-camera state ──────────────────────────────────────────────────────
+let reportMode          = false;
+let reportMarker        = null;
+let reportedCamMarkers  = [];
+
 // ─── Map init ─────────────────────────────────────────────────────────────────
 
 function initMap() {
@@ -58,6 +63,45 @@ function initMap() {
 
   map.on('moveend zoomend', debounce(fetchCameras, 600));
   setTimeout(fetchCameras, 800);
+
+  // Load community-reported cameras on init
+  fetchReportedCameras();
+
+  // Handle map clicks for report mode
+  map.on('click', (e) => {
+    if (!reportMode) return;
+    const { lat, lng } = e.latlng;
+
+    // Place a temporary orange marker
+    if (reportMarker) map.removeLayer(reportMarker);
+    reportMarker = L.marker([lat, lng], {
+      icon: L.divIcon({
+        html:       `<div style="color:#f97316;font-size:22px;text-shadow:1px 1px 3px black">📷</div>`,
+        className:  '',
+        iconSize:   [24, 24],
+        iconAnchor: [12, 12],
+      }),
+    }).addTo(map);
+
+    disableReportMode();
+    showReportForm(lat, lng);
+  });
+
+  // Inject report camera FAB button
+  const fab = document.createElement('button');
+  fab.id        = 'report-camera-btn';
+  fab.title     = 'Report a camera';
+  fab.innerHTML = '📷';
+  fab.setAttribute('aria-label', 'Report a camera');
+  document.body.appendChild(fab);
+
+  fab.addEventListener('click', () => {
+    if (reportMode) {
+      disableReportMode();
+    } else {
+      enableReportMode();
+    }
+  });
 }
 
 // ─── Geocoding (Nominatim) ────────────────────────────────────────────────────
@@ -319,6 +363,177 @@ function arrowSvg(bearing) {
   const y   = 10 + r * Math.sin(rad);
   return `<line x1="10" y1="10" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"
                 stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>`;
+}
+
+// ─── Reported camera icon (orange) ───────────────────────────────────────────
+
+function reportedCameraIcon() {
+  return L.divIcon({
+    html:        `<div style="color:#f97316;text-shadow:1px 1px 2px black;font-size:18px;line-height:1">📷</div>`,
+    className:   '',
+    iconSize:    [22, 22],
+    iconAnchor:  [11, 11],
+    popupAnchor: [0, -13],
+  });
+}
+
+// ─── Fetch + render community-reported cameras ────────────────────────────────
+
+async function fetchReportedCameras() {
+  try {
+    const resp = await fetch('/api/cameras/reported');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const cams = data.cameras || [];
+
+    // Clear existing reported markers
+    reportedCamMarkers.forEach(m => map.removeLayer(m));
+    reportedCamMarkers = [];
+
+    cams.forEach(cam => {
+      const date = cam.submitted_at ? cam.submitted_at.slice(0, 10) : 'Unknown';
+      const marker = L.marker([cam.lat, cam.lon], { icon: reportedCameraIcon() })
+        .addTo(map)
+        .bindTooltip(`Community reported - ${cam.type || 'Unknown'} - ${date}`, { permanent: false })
+        .bindPopup(`
+          <div class="popup-title">📷 Community Reported</div>
+          <div class="popup-detail"><b>Type:</b> ${cam.type || 'Unknown'}</div>
+          <div class="popup-detail"><b>Operator:</b> ${cam.operator || 'Unknown'}</div>
+          <div class="popup-detail"><b>Direction:</b> ${cam.direction || 'Unknown'}</div>
+          ${cam.notes ? `<div class="popup-detail"><b>Notes:</b> ${cam.notes}</div>` : ''}
+          <div class="popup-detail"><b>Status:</b> ${cam.status}</div>
+          <div class="popup-detail"><b>Submitted:</b> ${date}</div>
+        `);
+      reportedCamMarkers.push(marker);
+    });
+
+    console.log(`[ReportedCams] Loaded ${cams.length} community cameras`);
+  } catch (err) {
+    console.warn('[ReportedCams] Failed to load:', err);
+  }
+}
+
+// ─── Report camera mode ───────────────────────────────────────────────────────
+
+function enableReportMode() {
+  reportMode = true;
+  map.getContainer().style.cursor = 'crosshair';
+  const btn = document.getElementById('report-camera-btn');
+  if (btn) {
+    btn.style.background = '#dc2626';
+    btn.title = 'Click on map to place camera…';
+  }
+  showToast('Click on the map to mark a camera location');
+}
+
+function disableReportMode() {
+  reportMode = false;
+  map.getContainer().style.cursor = '';
+  const btn = document.getElementById('report-camera-btn');
+  if (btn) {
+    btn.style.background = '#ef4444';
+    btn.title = 'Report a camera';
+  }
+  if (reportMarker) {
+    map.removeLayer(reportMarker);
+    reportMarker = null;
+  }
+}
+
+function showReportForm(lat, lng) {
+  // Remove any existing form
+  const existing = document.getElementById('report-camera-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'report-camera-overlay';
+  overlay.innerHTML = `
+    <div id="report-camera-form">
+      <div class="report-form-header">
+        <span>📷 Report Camera</span>
+        <button id="report-form-close" title="Cancel">✕</button>
+      </div>
+      <div class="report-form-body">
+        <div class="report-form-coords">📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}</div>
+        <label>Type
+          <select id="report-type">
+            <option value="Unknown">Unknown</option>
+            <option value="Flock">Flock</option>
+            <option value="Genetec">Genetec</option>
+          </select>
+        </label>
+        <label>Operator
+          <select id="report-operator">
+            <option value="Unknown">Unknown</option>
+            <option value="Police">Police</option>
+            <option value="Private">Private</option>
+            <option value="HOA">HOA</option>
+          </select>
+        </label>
+        <label>Direction
+          <select id="report-direction">
+            <option value="Unknown">Unknown</option>
+            <option value="N">N</option>
+            <option value="NE">NE</option>
+            <option value="E">E</option>
+            <option value="SE">SE</option>
+            <option value="S">S</option>
+            <option value="SW">SW</option>
+            <option value="W">W</option>
+            <option value="NW">NW</option>
+          </select>
+        </label>
+        <label>Notes (optional)
+          <textarea id="report-notes" rows="2" maxlength="500" placeholder="Any details…"></textarea>
+        </label>
+        <button id="report-submit-btn">Submit Report</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById('report-form-close').addEventListener('click', () => {
+    overlay.remove();
+    disableReportMode();
+  });
+
+  document.getElementById('report-submit-btn').addEventListener('click', async () => {
+    const payload = {
+      lat:       lat,
+      lon:       lng,
+      type:      document.getElementById('report-type').value,
+      operator:  document.getElementById('report-operator').value,
+      direction: document.getElementById('report-direction').value,
+      notes:     document.getElementById('report-notes').value.trim(),
+    };
+
+    const submitBtn = document.getElementById('report-submit-btn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting…';
+
+    try {
+      const resp = await fetch('/api/report-camera', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      const result = await resp.json();
+      if (resp.ok && result.status === 'ok') {
+        overlay.remove();
+        disableReportMode();
+        showToast('✅ Camera reported — thank you!');
+        fetchReportedCameras(); // Refresh orange markers
+      } else {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Report';
+        showToast('❌ Error: ' + (result.error || 'Unknown error'));
+      }
+    } catch (err) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Submit Report';
+      showToast('❌ Network error, try again');
+    }
+  });
 }
 
 // ─── Overpass camera fetch ────────────────────────────────────────────────────
@@ -1243,6 +1458,19 @@ function showError(msg) {
   document.getElementById('error-message').textContent = msg;
   showPanel('error');
   setHint('⚠️ Routing failed — try different points');
+}
+
+function showToast(msg, durationMs = 3000) {
+  let toastEl = document.getElementById('ghost-toast');
+  if (!toastEl) {
+    toastEl = document.createElement('div');
+    toastEl.id = 'ghost-toast';
+    document.body.appendChild(toastEl);
+  }
+  toastEl.textContent = msg;
+  toastEl.classList.add('ghost-toast-visible');
+  clearTimeout(toastEl._hideTimer);
+  toastEl._hideTimer = setTimeout(() => toastEl.classList.remove('ghost-toast-visible'), durationMs);
 }
 
 function setHint(html) {

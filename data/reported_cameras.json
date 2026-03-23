@@ -1,0 +1,13 @@
+[
+  {
+    "id": "3fb905bd-7202-4c5f-80ba-ed8548241d8c",
+    "lat": 33.0185,
+    "lon": -80.1762,
+    "type": "Flock",
+    "operator": "Police",
+    "direction": "N",
+    "notes": "Test camera report",
+    "submitted_at": "2026-03-23T10:55:55.376313+00:00",
+    "status": "pending"
+  }
+]

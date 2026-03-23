@@ -8,10 +8,61 @@ import os
 import math
 import time
 import threading
+import uuid
+from datetime import datetime, timezone
 
 PORT = 8766
 DIR = os.path.dirname(os.path.abspath(__file__))
 VERSION = '1.0'
+DATA_DIR = os.path.join(DIR, 'data')
+REPORTED_CAMERAS_FILE = os.path.join(DATA_DIR, 'reported_cameras.json')
+GHOST_ADMIN_KEY = os.environ.get('GHOST_ADMIN_KEY', 'ghost-admin-secret')
+
+# ─── Reported cameras helpers ──────────────────────────────────────────────────
+_reported_lock = threading.Lock()
+
+def _load_reported_cameras():
+    """Load reported cameras from disk."""
+    if not os.path.exists(REPORTED_CAMERAS_FILE):
+        return []
+    try:
+        with open(REPORTED_CAMERAS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def _save_reported_cameras(cameras_list):
+    """Save reported cameras to disk (caller must hold _reported_lock)."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(REPORTED_CAMERAS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(cameras_list, f, indent=2)
+
+def _append_reported_camera(entry):
+    """Thread-safe append to reported_cameras.json."""
+    with _reported_lock:
+        cameras_list = _load_reported_cameras()
+        cameras_list.append(entry)
+        _save_reported_cameras(cameras_list)
+
+def _update_reported_camera_status(camera_id, new_status):
+    """Thread-safe status update for a reported camera."""
+    with _reported_lock:
+        cameras_list = _load_reported_cameras()
+        updated = False
+        for cam in cameras_list:
+            if cam.get('id') == camera_id:
+                cam['status'] = new_status
+                updated = True
+                break
+        if updated:
+            _save_reported_cameras(cameras_list)
+        return updated
+
+def fetch_confirmed_reported_cameras():
+    """Return all confirmed community-reported cameras."""
+    with _reported_lock:
+        cameras_list = _load_reported_cameras()
+    return [c for c in cameras_list if c.get('status') == 'confirmed']
 
 # ─── Camera cache (in-memory, keyed by bbox string) ───────────────────────────
 _camera_cache = {}          # bbox_key → {'cameras': [...], 'ts': float}
@@ -406,6 +457,26 @@ def ghost_route_fn(start_lon, start_lat, end_lon, end_lat):
         max(lats) + pad, max(lons) + pad,
     )
 
+    # Also merge confirmed community-reported cameras (same 50m radius penalty)
+    confirmed_reported = fetch_confirmed_reported_cameras()
+    if confirmed_reported:
+        existing_ids = {c['id'] for c in cameras}
+        for rc in confirmed_reported:
+            if rc['id'] not in existing_ids:
+                # Wrap in same shape as OSM cameras for count_cameras_on_route
+                cameras.append({
+                    'id':  rc['id'],
+                    'lat': rc['lat'],
+                    'lon': rc['lon'],
+                    'tags': {
+                        'man_made': 'surveillance',
+                        'operator': rc.get('operator', 'Unknown'),
+                        'note':     f"Community reported: {rc.get('type', 'Unknown')}",
+                    },
+                })
+        if confirmed_reported:
+            print(f'[Ghost] Merged {len(confirmed_reported)} confirmed community cameras')
+
     # Step 3: Score all routes by camera count
     def score_route(route):
         coords = decode_polyline6(route['geometry'])
@@ -720,6 +791,62 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
             self._proxy_post('https://overpass-api.de/api/interpreter', body, timeout=30)
             return
 
+        # ── POST /api/report-camera ───────────────────────────────────────────
+        if self.path == '/api/report-camera':
+            try:
+                data = json.loads(body)
+            except Exception:
+                self._send_json({'error': 'Invalid JSON'}, 400)
+                return
+
+            lat = data.get('lat')
+            lon = data.get('lon')
+
+            # Validate lat/lon
+            try:
+                lat = float(lat)
+                lon = float(lon)
+            except (TypeError, ValueError):
+                self._send_json({'error': 'lat and lon must be numbers'}, 400)
+                return
+            if not (-90 <= lat <= 90) or not (-180 <= lon <= 180):
+                self._send_json({'error': 'lat/lon out of valid range'}, 400)
+                return
+
+            # Allowed values
+            valid_types    = {'Flock', 'Genetec', 'Unknown'}
+            valid_operators = {'Police', 'Private', 'HOA', 'Unknown'}
+            valid_dirs     = {'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW', 'Unknown'}
+
+            cam_type  = str(data.get('type', 'Unknown'))
+            operator  = str(data.get('operator', 'Unknown'))
+            direction = str(data.get('direction', 'Unknown'))
+            notes     = str(data.get('notes', ''))[:500]  # cap notes length
+
+            if cam_type not in valid_types:
+                cam_type = 'Unknown'
+            if operator not in valid_operators:
+                operator = 'Unknown'
+            if direction not in valid_dirs:
+                direction = 'Unknown'
+
+            entry = {
+                'id':           str(uuid.uuid4()),
+                'lat':          lat,
+                'lon':          lon,
+                'type':         cam_type,
+                'operator':     operator,
+                'direction':    direction,
+                'notes':        notes,
+                'submitted_at': datetime.now(timezone.utc).isoformat(),
+                'status':       'pending',
+            }
+
+            _append_reported_camera(entry)
+            print(f'[Report] Camera reported at {lat},{lon} type={cam_type} operator={operator}')
+            self._send_json({'status': 'ok', 'message': 'Camera reported, thank you!'})
+            return
+
         self.send_response(404)
         self.end_headers()
 
@@ -978,6 +1105,45 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         # ── Existing proxy routes ─────────────────────────────────────────────
+        # ── GET /api/cameras/reported ─────────────────────────────────────────
+        if self.path.split('?')[0] == '/api/cameras/reported':
+            with _reported_lock:
+                all_cams = _load_reported_cameras()
+            visible = [c for c in all_cams if c.get('status') != 'rejected']
+            self._send_json({'cameras': visible, 'count': len(visible)})
+            return
+
+        # ── GET /api/admin/pending ─────────────────────────────────────────────
+        if self.path.startswith('/api/admin/pending') or self.path.startswith('/api/admin/confirm'):
+            parsed  = urllib.parse.urlparse(self.path)
+            params  = urllib.parse.parse_qs(parsed.query)
+            key     = params.get('key', [''])[0]
+
+            if key != GHOST_ADMIN_KEY:
+                self._send_json({'error': 'Unauthorized'}, 403)
+                return
+
+            # /api/admin/confirm?key=...&id=...&status=confirmed|rejected
+            if parsed.path == '/api/admin/confirm':
+                camera_id  = params.get('id', [''])[0]
+                new_status = params.get('status', ['confirmed'])[0]
+                if new_status not in ('confirmed', 'rejected', 'pending'):
+                    self._send_json({'error': 'status must be confirmed, rejected, or pending'}, 400)
+                    return
+                ok = _update_reported_camera_status(camera_id, new_status)
+                if ok:
+                    self._send_json({'status': 'ok', 'id': camera_id, 'new_status': new_status})
+                else:
+                    self._send_json({'error': 'Camera not found'}, 404)
+                return
+
+            # /api/admin/pending — list pending
+            with _reported_lock:
+                all_cams = _load_reported_cameras()
+            pending = [c for c in all_cams if c.get('status') == 'pending']
+            self._send_json({'cameras': pending, 'count': len(pending)})
+            return
+
         if self.path.startswith('/proxy/nominatim?'):
             query = self.path.split('?', 1)[1]
             self._proxy_get(f'https://nominatim.openstreetmap.org/search?{query}')
