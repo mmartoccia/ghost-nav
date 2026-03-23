@@ -341,7 +341,7 @@ out body;'''
 
 # ─── Ghost Route core algorithm ────────────────────────────────────────────────
 
-CAMERA_PROXIMITY_M = 30   # Camera "on route" threshold — tuned via GHOST-RESEARCH-002 (was 50, optimal=30)
+CAMERA_PROXIMITY_M = 25   # Camera "on route" threshold — tuned via GHOST-RESEARCH-005 (was 30, optimal=25)
 MAX_ROUTE_RATIO = 2.0      # Ghost must be < 2x fastest distance
 CLUSTER_RADIUS_M = 400     # Cameras within this distance share a cluster
 

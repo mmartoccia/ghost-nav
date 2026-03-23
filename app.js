@@ -15,7 +15,7 @@ const OSRM_BASE           = '/proxy/osrm/route/v1/driving';
 const OSRM_NEAREST_BASE   = '/proxy/osrm/nearest/v1/driving';
 const OVERPASS_URL        = '/proxy/overpass';
 const NOMINATIM_BASE      = '/proxy/nominatim';
-const CAMERA_PROXIMITY_M  = 50;    // meters — camera "on route" threshold
+const CAMERA_PROXIMITY_M  = 25;    // meters — camera "on route" threshold — tuned via GHOST-RESEARCH-005 (was 50, optimal=25)
 const GEOCODE_DEBOUNCE    = 300;   // ms
 const CLUSTER_RADIUS_M    = 200;   // cameras within this distance share a cluster
 const GHOST_AVOIDANCE_M   = 800;   // perpendicular offset for avoidance waypoints (m)
@@ -2452,6 +2452,7 @@ async function refreshHeatmap() {
 
 /**
  * Build / rebuild the Leaflet.heat layer from heatCameras.
+ * Weight each point by local camera density to create a proper gradient.
  */
 function renderHeatLayer() {
   if (heatLayer) {
@@ -2461,18 +2462,33 @@ function renderHeatLayer() {
 
   if (heatCameras.length === 0) return;
 
-  // Each camera is one heat point with intensity 1.0
-  const points = heatCameras.map(cam => [cam.lat, cam.lon, 1.0]);
+  // Calculate intensity for each camera based on local density (cameras within 1km)
+  const DENSITY_RADIUS_KM = 1;
+  const points = heatCameras.map(cam => {
+    // Count how many other cameras are within DENSITY_RADIUS_KM
+    let density = 0;
+    for (const other of heatCameras) {
+      const dist = haversine(cam.lat, cam.lon, other.lat, other.lon);
+      if (dist <= DENSITY_RADIUS_KM * 1000) density++;
+    }
+    // Normalize density: scale 0-20 cameras to 0.0-1.0 intensity
+    // With 20+ cameras in 1km radius = full red
+    const intensity = Math.min(1.0, density / 20);
+    return [cam.lat, cam.lon, intensity];
+  });
 
   heatLayer = L.heatLayer(points, {
     radius:  50,
     blur:    35,
-    max:     0.8,
+    max:     1.0,
+    minOpacity: 0.1,
     gradient: {
       0.0:  '#00ff00',  // green — camera-free
+      0.25: '#ccff00',  // lime
       0.4:  '#ffff00',  // yellow
-      0.7:  '#ff8800',  // orange
-      1.0:  '#ff0000',  // red — heavy surveillance
+      0.6:  '#ff8800',  // orange
+      0.8:  '#ff4400',  // dark orange
+      1.0:  '#ff0000',  // red — heavy surveillance clusters
     },
   }).addTo(map);
 }

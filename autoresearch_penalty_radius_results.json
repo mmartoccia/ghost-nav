@@ -1,0 +1,270 @@
+{
+  "experiment": "GHOST-RESEARCH-005",
+  "methodology": "Karpathy autoresearch \u2014 vary penalty radius, simulate ghost route quality",
+  "timestamp": "2026-03-23T17:39:58Z",
+  "winner_radius_m": 25,
+  "algorithmic_winner_m": 25,
+  "judge_winner_m": 25,
+  "winner_score": 0.3319,
+  "ranking": [
+    {
+      "radius_m": 25,
+      "avg_score": 0.3319,
+      "avg_cameras_on_route": 16.8,
+      "avg_cameras_avoided": 305.0,
+      "avg_extra_km_estimate": 11.494,
+      "per_route": [
+        {
+          "label": "NYC midtown",
+          "cameras_on_ghost_route": 31,
+          "cameras_avoided": 450,
+          "n_penalty_triggers": 221,
+          "extra_km": 17.929,
+          "score": 0.2593
+        },
+        {
+          "label": "LA",
+          "cameras_on_ghost_route": 40,
+          "cameras_avoided": 848,
+          "n_penalty_triggers": 434,
+          "extra_km": 31.031,
+          "score": 0.4296
+        },
+        {
+          "label": "DC",
+          "cameras_on_ghost_route": 4,
+          "cameras_avoided": 65,
+          "n_penalty_triggers": 32,
+          "extra_km": 2.508,
+          "score": 0.3151
+        },
+        {
+          "label": "Chicago",
+          "cameras_on_ghost_route": 3,
+          "cameras_avoided": 54,
+          "n_penalty_triggers": 25,
+          "extra_km": 1.925,
+          "score": 0.3529
+        },
+        {
+          "label": "SF",
+          "cameras_on_ghost_route": 6,
+          "cameras_avoided": 108,
+          "n_penalty_triggers": 52,
+          "extra_km": 4.076,
+          "score": 0.3027
+        }
+      ]
+    },
+    {
+      "radius_m": 50,
+      "avg_score": 0.2496,
+      "avg_cameras_on_route": 19.4,
+      "avg_cameras_avoided": 302.4,
+      "avg_extra_km_estimate": 17.601,
+      "per_route": [
+        {
+          "label": "NYC midtown",
+          "cameras_on_ghost_route": 39,
+          "cameras_avoided": 442,
+          "n_penalty_triggers": 316,
+          "extra_km": 20.624,
+          "score": 0.2297
+        },
+        {
+          "label": "LA",
+          "cameras_on_ghost_route": 45,
+          "cameras_avoided": 843,
+          "n_penalty_triggers": 638,
+          "extra_km": 54.626,
+          "score": 0.3011
+        },
+        {
+          "label": "DC",
+          "cameras_on_ghost_route": 4,
+          "cameras_avoided": 65,
+          "n_penalty_triggers": 50,
+          "extra_km": 3.782,
+          "score": 0.2355
+        },
+        {
+          "label": "Chicago",
+          "cameras_on_ghost_route": 4,
+          "cameras_avoided": 53,
+          "n_penalty_triggers": 35,
+          "extra_km": 3.234,
+          "score": 0.2428
+        },
+        {
+          "label": "SF",
+          "cameras_on_ghost_route": 5,
+          "cameras_avoided": 109,
+          "n_penalty_triggers": 88,
+          "extra_km": 5.74,
+          "score": 0.239
+        }
+      ]
+    },
+    {
+      "radius_m": 150,
+      "avg_score": 0.2481,
+      "avg_cameras_on_route": 5.8,
+      "avg_cameras_avoided": 316.0,
+      "avg_extra_km_estimate": 21.215,
+      "per_route": [
+        {
+          "label": "NYC midtown",
+          "cameras_on_ghost_route": 13,
+          "cameras_avoided": 468,
+          "n_penalty_triggers": 453,
+          "extra_km": 20.624,
+          "score": 0.2432
+        },
+        {
+          "label": "LA",
+          "cameras_on_ghost_route": 14,
+          "cameras_avoided": 874,
+          "n_penalty_triggers": 848,
+          "extra_km": 72.501,
+          "score": 0.2552
+        },
+        {
+          "label": "DC",
+          "cameras_on_ghost_route": 1,
+          "cameras_avoided": 68,
+          "n_penalty_triggers": 65,
+          "extra_km": 3.782,
+          "score": 0.2464
+        },
+        {
+          "label": "Chicago",
+          "cameras_on_ghost_route": 1,
+          "cameras_avoided": 56,
+          "n_penalty_triggers": 54,
+          "extra_km": 3.428,
+          "score": 0.2456
+        },
+        {
+          "label": "SF",
+          "cameras_on_ghost_route": 0,
+          "cameras_avoided": 114,
+          "n_penalty_triggers": 112,
+          "extra_km": 5.74,
+          "score": 0.25
+        }
+      ]
+    },
+    {
+      "radius_m": 75,
+      "avg_score": 0.2424,
+      "avg_cameras_on_route": 18.2,
+      "avg_cameras_avoided": 303.6,
+      "avg_extra_km_estimate": 19.37,
+      "per_route": [
+        {
+          "label": "NYC midtown",
+          "cameras_on_ghost_route": 39,
+          "cameras_avoided": 442,
+          "n_penalty_triggers": 373,
+          "extra_km": 20.624,
+          "score": 0.2297
+        },
+        {
+          "label": "LA",
+          "cameras_on_ghost_route": 40,
+          "cameras_avoided": 848,
+          "n_penalty_triggers": 739,
+          "extra_km": 63.278,
+          "score": 0.2733
+        },
+        {
+          "label": "DC",
+          "cameras_on_ghost_route": 4,
+          "cameras_avoided": 65,
+          "n_penalty_triggers": 57,
+          "extra_km": 3.782,
+          "score": 0.2355
+        },
+        {
+          "label": "Chicago",
+          "cameras_on_ghost_route": 4,
+          "cameras_avoided": 53,
+          "n_penalty_triggers": 44,
+          "extra_km": 3.428,
+          "score": 0.2325
+        },
+        {
+          "label": "SF",
+          "cameras_on_ghost_route": 4,
+          "cameras_avoided": 110,
+          "n_penalty_triggers": 102,
+          "extra_km": 5.74,
+          "score": 0.2412
+        }
+      ]
+    },
+    {
+      "radius_m": 100,
+      "avg_score": 0.2411,
+      "avg_cameras_on_route": 15.8,
+      "avg_cameras_avoided": 306.0,
+      "avg_extra_km_estimate": 20.271,
+      "per_route": [
+        {
+          "label": "NYC midtown",
+          "cameras_on_ghost_route": 34,
+          "cameras_avoided": 447,
+          "n_penalty_triggers": 410,
+          "extra_km": 20.624,
+          "score": 0.2323
+        },
+        {
+          "label": "LA",
+          "cameras_on_ghost_route": 34,
+          "cameras_avoided": 854,
+          "n_penalty_triggers": 791,
+          "extra_km": 67.782,
+          "score": 0.262
+        },
+        {
+          "label": "DC",
+          "cameras_on_ghost_route": 4,
+          "cameras_avoided": 65,
+          "n_penalty_triggers": 60,
+          "extra_km": 3.782,
+          "score": 0.2355
+        },
+        {
+          "label": "Chicago",
+          "cameras_on_ghost_route": 4,
+          "cameras_avoided": 53,
+          "n_penalty_triggers": 46,
+          "extra_km": 3.428,
+          "score": 0.2325
+        },
+        {
+          "label": "SF",
+          "cameras_on_ghost_route": 3,
+          "cameras_avoided": 111,
+          "n_penalty_triggers": 107,
+          "extra_km": 5.74,
+          "score": 0.2434
+        }
+      ]
+    }
+  ],
+  "judge_verdict": "WINNER: 25m\n\nA 25m radius achieves the best score (0.3319) in our simulation, balancing 305 cameras avoided against 11.49km avg detour. This aligns with ALPR effective range (30-60m) while keeping detours practical in dense urban grids where larger radii rapidly saturate alternate roads.",
+  "judge_model": "rule-based-fallback",
+  "test_routes": [
+    "NYC midtown",
+    "LA",
+    "DC",
+    "Chicago",
+    "SF"
+  ],
+  "routes_evaluated": 5,
+  "data_source": "synthetic",
+  "scoring_formula": "privacy_ratio / (1 + detour_ratio), where privacy_ratio = avoided_cams / total_cams",
+  "camera_model": "Synthetic: 30% at 2-25m, 40% at 25-75m, 20% at 75-150m, city-specific density",
+  "safety_distance_m": 50
+}
