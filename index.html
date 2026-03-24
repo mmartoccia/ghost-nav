@@ -273,7 +273,72 @@
 
       </aside>
     </div>
-  </div>
+
+  <!-- Route Comparison Panel (below map, side-by-side stats) -->
+  <div id="route-comparison-panel" class="route-comparison-panel hidden">
+    <div class="rcp-header">
+      <span class="rcp-title">📊 Route Comparison</span>
+      <button class="rcp-close" id="rcp-close-btn" title="Close comparison">✕</button>
+    </div>
+    <div class="rcp-grid">
+      <!-- Normal Route Card -->
+      <div class="rcp-card rcp-card--normal" id="rcp-normal">
+        <div class="rcp-card-header">
+          <span class="rcp-card-label">⚡ FASTEST ROUTE</span>
+        </div>
+        <div class="rcp-stats">
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Distance</span>
+            <span class="rcp-stat-value" id="rcp-normal-distance">—</span>
+          </div>
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Est. Time</span>
+            <span class="rcp-stat-value" id="rcp-normal-time">—</span>
+          </div>
+          <div class="rcp-stat rcp-stat--cameras">
+            <span class="rcp-stat-label">Cameras Passed</span>
+            <span class="rcp-stat-value rcp-cams--bad" id="rcp-normal-cameras">—</span>
+          </div>
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Privacy Score</span>
+            <span class="rcp-stat-value" id="rcp-normal-score">—</span>
+          </div>
+        </div>
+        <button class="rcp-show-btn" id="rcp-normal-show" data-route="fastest">Show on Map</button>
+      </div>
+      <!-- Privacy Route Card -->
+      <div class="rcp-card rcp-card--privacy" id="rcp-privacy">
+        <div class="rcp-card-header">
+          <span class="rcp-card-label">👻 PRIVACY ROUTE</span>
+          <span class="rcp-recommended hidden" id="rcp-recommended">★ Recommended</span>
+        </div>
+        <div class="rcp-stats">
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Distance</span>
+            <span class="rcp-stat-value" id="rcp-privacy-distance">—</span>
+          </div>
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Est. Time</span>
+            <span class="rcp-stat-value" id="rcp-privacy-time">—</span>
+          </div>
+          <div class="rcp-stat rcp-stat--cameras">
+            <span class="rcp-stat-label">Cameras Passed</span>
+            <span class="rcp-stat-value rcp-cams--good" id="rcp-privacy-cameras">—</span>
+          </div>
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Privacy Score</span>
+            <span class="rcp-stat-value" id="rcp-privacy-score">—</span>
+          </div>
+        </div>
+        <button class="rcp-show-btn rcp-show-btn--privacy" id="rcp-privacy-show" data-route="ghost">Show on Map</button>
+      </div>
+    </div>
+    <!-- Camera savings badge -->
+    <div class="rcp-savings-badge hidden" id="rcp-savings-badge">
+      <span id="rcp-savings-text">👁 You'll pass 0 fewer cameras</span>
+    </div>
+  </div><!-- /route-comparison-panel -->
+  </div><!-- /app -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/leaflet.heat/dist/leaflet-heat.js"></script>

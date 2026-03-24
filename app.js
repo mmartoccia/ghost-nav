@@ -24,8 +24,8 @@ const GHOST_TIME_WARNING  = 2.0;   // warn if ghost route > this × fastest dura
 const AVOIDANCE_DISTANCES = [800, 1500, 2500]; // retry distances for ghost route
 
 const ROUTE_COLORS = {
-  fastest: { color: '#3b82f6', weight: 5, opacity: 0.55 },                             // blue, semi-transparent
-  ghost:   { color: '#22c55e', weight: 7, opacity: 0.9, dashArray: '12, 6' },          // green, dashed, on top
+  fastest: { color: '#6b7280', weight: 4, opacity: 0.65, dashArray: '8, 5' },          // dashed gray (normal route)
+  ghost:   { color: '#22c55e', weight: 7, opacity: 0.92 },                              // solid green, thick (privacy route)
   alt:     { color: '#94a3b8', weight: 4, opacity: 0.4 },
 };
 
@@ -793,6 +793,9 @@ async function processRoutes(routes) {
   // ── Show route comparison overlay ──
   displayRouteComparison(fastest, ghostItem ? ghostItem.route : null);
 
+  // ── Show bottom comparison panel (side-by-side stats) ──
+  renderRouteComparisonPanel(fastestItem, ghostItem);
+
   // ── Auto-select preferred route ──
   const defaultId = (preferGhost && ghostItem) ? 'ghost' : 'fastest';
   activateRoute(defaultId);
@@ -1204,6 +1207,131 @@ function displayRouteComparison(fastest, ghost) {
   panel.style.display = 'block';
 }
 
+// ─── Route Comparison Panel (GHOST-COMPARE-001) ───────────────────────────────
+
+/**
+ * Render the side-by-side comparison panel below the map.
+ * Shows fastest vs privacy route with stats and "Show on Map" buttons.
+ */
+function renderRouteComparisonPanel(fastestItem, ghostItem) {
+  const panel = document.getElementById('route-comparison-panel');
+  if (!panel) return;
+
+  if (!fastestItem) { panel.classList.add('hidden'); return; }
+
+  // ── Helpers ──
+  function fmtDist(meters) {
+    const mi = meters / 1609.34;
+    return mi >= 1 ? `${mi.toFixed(1)} mi` : `${Math.round(meters)} m`;
+  }
+  function fmtTime(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.round((seconds % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m} min`;
+  }
+  function privacyScore(hits) {
+    return Math.max(0, Math.min(100, Math.round(100 - hits * 7)));
+  }
+  function scoreColor(score) {
+    if (score >= 70) return '#22c55e';
+    if (score >= 40) return '#eab308';
+    return '#ef4444';
+  }
+
+  // ── Fastest (normal) card ──
+  const fCams  = fastestItem.cameraHits;
+  const fScore = privacyScore(fCams);
+  document.getElementById('rcp-normal-distance').textContent = fmtDist(fastestItem.distance);
+  document.getElementById('rcp-normal-time').textContent     = fmtTime(fastestItem.duration);
+  document.getElementById('rcp-normal-cameras').textContent  = String(fCams);
+  const fScoreEl = document.getElementById('rcp-normal-score');
+  fScoreEl.textContent = `${fScore}/100`;
+  fScoreEl.style.color = scoreColor(fScore);
+
+  // ── Privacy (ghost) card ──
+  const rcpPrivacyCard = document.getElementById('rcp-privacy');
+  const rcpRecommended = document.getElementById('rcp-recommended');
+  const savingsBadge   = document.getElementById('rcp-savings-badge');
+  const savingsText    = document.getElementById('rcp-savings-text');
+
+  if (ghostItem) {
+    const gCams    = ghostItem.cameraHits;
+    const gScore   = privacyScore(gCams);
+    const distPct  = ((ghostItem.distance / fastestItem.distance - 1) * 100).toFixed(0);
+    const timeExtraMin = Math.round((ghostItem.duration - fastestItem.duration) / 60);
+    const saved    = Math.max(0, fCams - gCams);
+
+    const distLabel = distPct > 0
+      ? `${fmtDist(ghostItem.distance)} <small style="color:#8892a4">(+${distPct}%)</small>`
+      : fmtDist(ghostItem.distance);
+    const timeLabel = timeExtraMin > 0
+      ? `${fmtTime(ghostItem.duration)} <small style="color:#8892a4">(+${timeExtraMin} min)</small>`
+      : fmtTime(ghostItem.duration);
+
+    document.getElementById('rcp-privacy-distance').innerHTML = distLabel;
+    document.getElementById('rcp-privacy-time').innerHTML     = timeLabel;
+    document.getElementById('rcp-privacy-cameras').textContent = String(gCams);
+    const gScoreEl = document.getElementById('rcp-privacy-score');
+    gScoreEl.textContent = `${gScore}/100`;
+    gScoreEl.style.color = scoreColor(gScore);
+
+    // Show recommended badge if ghost is clearly better
+    if (gCams < fCams) {
+      rcpRecommended.classList.remove('hidden');
+    } else {
+      rcpRecommended.classList.add('hidden');
+    }
+
+    // Camera savings badge
+    if (saved > 0) {
+      savingsText.textContent = `👁 You'll pass ${saved} fewer camera${saved !== 1 ? 's' : ''} on the Ghost Route`;
+      savingsBadge.classList.remove('hidden');
+    } else {
+      savingsBadge.classList.add('hidden');
+    }
+  } else {
+    // No ghost route available
+    document.getElementById('rcp-privacy-distance').textContent = '—';
+    document.getElementById('rcp-privacy-time').textContent     = '—';
+    document.getElementById('rcp-privacy-cameras').textContent  = 'N/A';
+    document.getElementById('rcp-privacy-score').textContent    = '—';
+    rcpRecommended.classList.add('hidden');
+    savingsBadge.classList.add('hidden');
+    rcpPrivacyCard.style.opacity = '0.5';
+  }
+
+  // ── Show/Map buttons ──
+  const normalShowBtn  = document.getElementById('rcp-normal-show');
+  const privacyShowBtn = document.getElementById('rcp-privacy-show');
+
+  if (normalShowBtn) {
+    normalShowBtn.onclick = () => {
+      activateRoute('fastest');
+      highlightRcpCard('normal');
+    };
+  }
+  if (privacyShowBtn) {
+    privacyShowBtn.onclick = () => {
+      if (ghostItem) {
+        activateRoute('ghost');
+        highlightRcpCard('privacy');
+      }
+    };
+    privacyShowBtn.disabled = !ghostItem;
+  }
+
+  // ── Close button ──
+  const closeBtn = document.getElementById('rcp-close-btn');
+  if (closeBtn) closeBtn.onclick = () => panel.classList.add('hidden');
+
+  panel.classList.remove('hidden');
+}
+
+function highlightRcpCard(which) {
+  document.getElementById('rcp-normal').classList.toggle('rcp-active', which === 'normal');
+  document.getElementById('rcp-privacy').classList.toggle('rcp-active', which === 'privacy');
+}
+
 // ─── Route drawing ────────────────────────────────────────────────────────────
 
 function drawRouteItem(item) {
@@ -1252,6 +1380,10 @@ function activateRoute(id) {
   document.querySelectorAll('.route-card').forEach(card => {
     card.classList.toggle('active', card.dataset.id === id);
   });
+
+  // Sync comparison panel card highlights
+  if (id === 'fastest') highlightRcpCard('normal');
+  else if (id === 'ghost') highlightRcpCard('privacy');
 }
 
 function clearRouteLayers() {
