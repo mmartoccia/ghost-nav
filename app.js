@@ -986,120 +986,98 @@ async function snapToNearestRoad(lat, lon, originalRouteCoords) {
 }
 
 /**
- * Build a camera-avoiding "Ghost Route" using OSRM waypoints.
+ * Build a camera-avoiding "Ghost Route" using corridor-based privacy routing.
  *
- * Algorithm:
- *  1. Cluster cameras on the fastest route
- *  2. For each cluster, compute perpendicular avoidance waypoint
- *  3. Snap waypoints to nearest road (preferring roads different from original)
- *  4. Sort waypoints by position along original route
- *  5. Request OSRM route through those waypoints
- *  6. Retry with larger avoidance distances if ghost has >= fastest cameras
- *  7. Try opposite perpendicular direction on retry
- *  8. Fall back to best OSRM alternative if no improvement found
+ * Algorithm (GHOST-ROUTE-002 — corridor approach):
+ *  1. Score all OSRM alternatives (already fetched with ?alternatives=3)
+ *     by counting cameras within 50m of the route polyline.
+ *  2. If any alternative has fewer cameras than the fastest route, use the best one.
+ *  3. Apply loop-detection safety:
+ *     - No coordinate appears twice within 50m tolerance
+ *     - Route distance is not >3x the direct start→end distance
+ *     - If either check fails, fall back to fastest route (no ghost).
+ *  4. Never insert intermediate waypoints — rely entirely on OSRM native alternatives.
  */
 async function buildGhostRoute(fastestCoords, onRouteCameras, altRoutes) {
   const fastestCamCount = countCamerasOnCoords(fastestCoords);
 
   try {
-    // 1. Cluster
-    const clusters = clusterCameras(onRouteCameras);
-    console.log('[Ghost] Clusters:', clusters.length, clusters.map(c => c.size));
+    // ── Step 1: Score OSRM alternatives ────────────────────────────────────
+    console.log('[Ghost] Corridor mode: scoring', (altRoutes || []).length, 'OSRM alternatives');
 
-    // Sort clusters by size descending (prioritize dense clusters)
-    clusters.sort((a, b) => b.size - a.size);
+    let bestAlt    = null;
+    let bestCams   = fastestCamCount;
 
-    let bestGhostRoute = null;
-    let bestCamCount = Infinity;
-
-    // Try each avoidance distance, and both perpendicular directions
-    for (let attempt = 0; attempt < AVOIDANCE_DISTANCES.length; attempt++) {
-      const avoidDist = AVOIDANCE_DISTANCES[attempt];
-      for (const invertDir of [false, true]) {
-        // 2. Compute raw avoidance waypoints
-        const rawWaypoints = [];
-        for (const cluster of clusters) {
-          const wp = computePerpendicularWaypoint(cluster, fastestCoords, avoidDist, invertDir);
-          if (wp) rawWaypoints.push(wp);
-          if (rawWaypoints.length >= MAX_GHOST_WAYPOINTS) break;
-        }
-
-        if (rawWaypoints.length === 0) continue;
-
-        // 3. Sort waypoints by segment index
-        rawWaypoints.sort((a, b) => a.segIdx - b.segIdx);
-
-        // 4. Snap each waypoint to nearest road (prefer roads off the original route)
-        const snapped = await Promise.all(
-          rawWaypoints.map(wp => snapToNearestRoad(wp.lat, wp.lon, fastestCoords))
-        );
-
-        console.log(`[Ghost] Attempt ${attempt + 1} (dist=${avoidDist}m, invert=${invertDir}) waypoints:`, snapped);
-
-        // 5. Build OSRM URL
-        const s = startCoords;
-        const e = endCoords;
-        const waypointStr = snapped.map(w => `${w.lon.toFixed(6)},${w.lat.toFixed(6)}`).join(';');
-        const url = `${OSRM_BASE}/${s.lng.toFixed(6)},${s.lat.toFixed(6)};${waypointStr};${e.lng.toFixed(6)},${e.lat.toFixed(6)}?overview=full&geometries=geojson`;
-
-        try {
-          const resp = await fetch(url);
-          if (!resp.ok) continue;
-          const data = await resp.json();
-
-          if (data.code !== 'Ok' || !data.routes?.length) continue;
-
-          const candidate = data.routes[0];
-          const camCount = countCamerasOnCoords(candidate.geometry.coordinates);
-          console.log(`[Ghost] Attempt ${attempt + 1} invert=${invertDir}: ${camCount} cameras (fastest has ${fastestCamCount})`);
-
-          if (camCount < fastestCamCount && camCount < bestCamCount) {
-            bestCamCount = camCount;
-            bestGhostRoute = candidate;
-            console.log('[Ghost] New best ghost route found:', camCount, 'cameras');
-          }
-        } catch (err) {
-          console.warn('[Ghost] Route request failed:', err);
-          continue;
-        }
-
-        // If we found a good route, stop trying
-        if (bestGhostRoute && bestCamCount < fastestCamCount) break;
-      }
-
-      if (bestGhostRoute && bestCamCount < fastestCamCount) break;
-    }
-
-    // If we found a ghost route with fewer cameras, use it
-    if (bestGhostRoute) {
-      return bestGhostRoute;
-    }
-
-    // 8. Fallback: use the best OSRM alternative route (fewest cameras)
-    console.log('[Ghost] No waypoint route improved camera count — trying OSRM alternatives');
     if (altRoutes && altRoutes.length > 0) {
-      let bestAlt = null;
-      let bestAltCams = fastestCamCount;
       for (const alt of altRoutes) {
         const camCount = countCamerasOnCoords(alt.geometry.coordinates);
-        if (camCount < bestAltCams) {
-          bestAltCams = camCount;
-          bestAlt = alt;
+        console.log('[Ghost] Alt route cameras:', camCount, 'vs fastest:', fastestCamCount,
+                    'dist:', Math.round(alt.distance), 'm');
+        if (camCount < bestCams) {
+          bestCams = camCount;
+          bestAlt  = alt;
         }
-      }
-      if (bestAlt) {
-        console.log('[Ghost] Using best OSRM alternative with', bestAltCams, 'cameras');
-        return bestAlt;
       }
     }
 
-    console.log('[Ghost] No improvement found, ghost route skipped');
-    return null;
+    if (!bestAlt) {
+      console.log('[Ghost] No alternative reduces camera count, ghost route skipped');
+      return null;
+    }
+
+    // ── Step 2: Loop-detection safety ──────────────────────────────────────
+    const validated = validateRoute(bestAlt, startCoords, endCoords);
+    if (!validated) {
+      console.warn('[Ghost] Loop detection failed on best alternative — falling back to null');
+      return null;
+    }
+
+    console.log('[Ghost] Corridor ghost route selected:', bestCams, 'cameras',
+                '(saved', (fastestCamCount - bestCams), 'from', fastestCamCount, ')');
+    return bestAlt;
 
   } catch (err) {
     console.warn('[Ghost] Ghost route build failed:', err);
     return null;
   }
+}
+
+/**
+ * Validate a candidate route for loops and excessive detour.
+ *
+ * Checks:
+ *  1. No coordinate appears twice within 50m (loop detection)
+ *  2. Route distance ≤ 3× direct straight-line distance between start and end
+ *
+ * @param {object} route      - OSRM route object with .geometry.coordinates and .distance
+ * @param {object} startCoords - { lat, lng } of start
+ * @param {object} endCoords   - { lat, lng } of end
+ * @returns {boolean} true if route passes validation, false if it should be rejected
+ */
+function validateRoute(route, startCoords, endCoords) {
+  const coords = route.geometry.coordinates; // [lon, lat] pairs
+
+  // Check 1: no repeated coordinates within 50m
+  const LOOP_TOLERANCE_M = 50;
+  for (let i = 0; i < coords.length; i++) {
+    for (let j = i + 2; j < coords.length; j++) {
+      const d = haversine(coords[i][1], coords[i][0], coords[j][1], coords[j][0]);
+      if (d < LOOP_TOLERANCE_M) {
+        console.warn(`[Ghost] Loop detected: coord ${i} and ${j} are ${Math.round(d)}m apart`);
+        return false;
+      }
+    }
+  }
+
+  // Check 2: route distance ≤ 3× straight-line distance
+  const directDist = haversine(startCoords.lat, startCoords.lng, endCoords.lat, endCoords.lng);
+  const MAX_DETOUR_RATIO = 3.0;
+  if (directDist > 0 && route.distance > directDist * MAX_DETOUR_RATIO) {
+    console.warn(`[Ghost] Excessive detour: route ${Math.round(route.distance)}m vs direct ${Math.round(directDist)}m (ratio ${(route.distance / directDist).toFixed(2)}x)`);
+    return false;
+  }
+
+  return true;
 }
 
 /** Count cameras on a coordinate array (internal helper) */
