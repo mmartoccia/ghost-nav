@@ -47,6 +47,14 @@ let reportMode          = false;
 let reportMarker        = null;
 let reportedCamMarkers  = [];
 
+// ─── Privacy/Tor state ────────────────────────────────────────────────────────
+let privacyModeEnabled  = localStorage.getItem('ghost-privacy-mode') === 'true';
+let privacyStatus       = {
+  tor_available: false,
+  proxy_configured: false,
+  mode: 'disabled',
+};
+
 // ─── Map init ─────────────────────────────────────────────────────────────────
 
 function initMap() {
@@ -66,6 +74,9 @@ function initMap() {
 
   // Load community-reported cameras on init
   fetchReportedCameras();
+  
+  // Check privacy status on init
+  checkPrivacyStatus();
 
   // Handle map clicks for report mode
   map.on('click', (e) => {
@@ -102,6 +113,97 @@ function initMap() {
       enableReportMode();
     }
   });
+  
+  // Inject privacy mode toggle UI
+  const privacyContainer = document.createElement('div');
+  privacyContainer.id = 'privacy-mode-container';
+  privacyContainer.innerHTML = `
+    <div class="privacy-controls">
+      <label class="privacy-toggle-label">
+        <input type="checkbox" id="privacy-mode-toggle" ${privacyModeEnabled ? 'checked' : ''}/>
+        <span class="privacy-toggle-text">Privacy Mode</span>
+      </label>
+      <div id="privacy-status-indicator" class="privacy-status-indicator status-off">🔒 Privacy OFF</div>
+    </div>
+  `;
+  document.body.appendChild(privacyContainer);
+  
+  document.getElementById('privacy-mode-toggle').addEventListener('change', (e) => {
+    togglePrivacyMode(e.target.checked);
+  });
+}
+
+// ─── Privacy Mode (Tor/VPN) ───────────────────────────────────────────────────
+
+async function checkPrivacyStatus() {
+  try {
+    const resp = await fetch('/api/privacy-status');
+    if (resp.ok) {
+      privacyStatus = await resp.json();
+      updatePrivacyUI();
+    }
+  } catch (err) {
+    console.warn('[Privacy] Failed to fetch status:', err);
+  }
+}
+
+async function togglePrivacyMode(enabled) {
+  privacyModeEnabled = enabled;
+  localStorage.setItem('ghost-privacy-mode', enabled ? 'true' : 'false');
+  
+  try {
+    const resp = await fetch('/api/privacy-mode', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      privacyStatus = {
+        tor_available: data.tor_available,
+        proxy_configured: data.proxy_configured,
+        mode: data.mode || 'disabled',
+      };
+      updatePrivacyUI();
+      console.log('[Privacy] Mode toggled:', enabled, data);
+    }
+  } catch (err) {
+    console.error('[Privacy] Failed to toggle mode:', err);
+    privacyModeEnabled = !enabled;  // Revert on failure
+  }
+}
+
+function updatePrivacyUI() {
+  const toggle = document.getElementById('privacy-mode-toggle');
+  const status = document.getElementById('privacy-status-indicator');
+  
+  if (!toggle || !status) return;
+  
+  toggle.checked = privacyModeEnabled;
+  
+  let statusText = '🔒 Privacy OFF';
+  let statusClass = 'status-off';
+  
+  if (privacyModeEnabled) {
+    if (privacyStatus.tor_available) {
+      statusText = '🛡️ Tor Connected';
+      statusClass = 'status-tor';
+    } else if (privacyStatus.proxy_configured) {
+      statusText = '🔐 Proxy Connected';
+      statusClass = 'status-proxy';
+    } else {
+      statusText = '⚠️ Privacy Mode (No Tor/VPN)';
+      statusClass = 'status-warning';
+    }
+  }
+  
+  status.textContent = statusText;
+  status.className = `privacy-status-indicator ${statusClass}`;
+  
+  // Show warning if privacy enabled but no proxy
+  if (privacyModeEnabled && !privacyStatus.tor_available && !privacyStatus.proxy_configured) {
+    status.title = 'Privacy mode enabled but Tor/VPN not available. Queries sent in cleartext. Install Tor for full privacy.';
+  }
 }
 
 // ─── Geocoding (Nominatim) ────────────────────────────────────────────────────

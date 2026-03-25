@@ -1,0 +1,13 @@
+# Privacy/Tor/VPN Support for Ghost Nav
+# Install with: pip3 install -r requirements-privacy.txt
+
+# Core privacy libraries
+PySocks>=1.7.1        # SOCKS5 proxy support for urllib
+requests>=2.31.0      # HTTP library with proxy support
+requests[socks]>=2.31.0  # requests with SOCKS5 support
+
+# Tor circuit management
+stem>=1.8.0           # Python Tor controller library
+
+# Optional: For enhanced DNS privacy (future)
+# dnspython>=2.4.0    # DNS library for DNSSEC support

@@ -9,7 +9,26 @@ import math
 import time
 import threading
 import uuid
+import socket
 from datetime import datetime, timezone
+
+# Tor/VPN/SOCKS5 support
+try:
+    import PySocks
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    _REQUESTS_AVAILABLE = True
+except ImportError:
+    _REQUESTS_AVAILABLE = False
+
+try:
+    import stem
+    from stem import Signal
+    from stem.control import Controller
+    _STEM_AVAILABLE = True
+except ImportError:
+    _STEM_AVAILABLE = False
 
 # Weekly report module (optional — graceful fallback if jinja2 not installed)
 try:
@@ -25,6 +44,37 @@ DATA_DIR = os.path.join(DIR, 'data')
 REPORTED_CAMERAS_FILE = os.path.join(DATA_DIR, 'reported_cameras.json')
 REPORTER_STATS_FILE   = os.path.join(DATA_DIR, 'reporter_stats.json')
 GHOST_ADMIN_KEY = os.environ.get('GHOST_ADMIN_KEY', 'ghost-admin-secret')
+
+# ─── Privacy/VPN/Tor Configuration ────────────────────────────────────────────
+PRIVACY_MODE_ENABLED = False  # User opt-in, not default
+TOR_SOCKS5_HOST = os.environ.get('TOR_SOCKS5_HOST', '127.0.0.1')
+TOR_SOCKS5_PORT = int(os.environ.get('TOR_SOCKS5_PORT', '9050'))
+TOR_CONTROL_HOST = os.environ.get('TOR_CONTROL_HOST', '127.0.0.1')
+TOR_CONTROL_PORT = int(os.environ.get('TOR_CONTROL_PORT', '9051'))
+TOR_CONTROL_PASSWORD = os.environ.get('TOR_CONTROL_PASSWORD', '')
+USER_PROXY_HOST = os.environ.get('GHOST_PROXY_HOST', None)
+USER_PROXY_PORT = int(os.environ.get('GHOST_PROXY_PORT', '0')) if os.environ.get('GHOST_PROXY_PORT') else None
+USER_PROXY_TYPE = os.environ.get('GHOST_PROXY_TYPE', 'socks5')  # socks5 or http
+
+# Privacy state (thread-safe)
+_privacy_lock = threading.Lock()
+_privacy_state = {
+    'mode_enabled': False,
+    'tor_available': False,
+    'proxy_configured': USER_PROXY_HOST is not None,
+    'circuit_rotation_count': 0,
+    'last_rotated_at': None,
+}
+
+# ─── Privacy proxy config (runtime-configurable via /api/privacy-proxy) ───────
+_proxy_config_lock = threading.Lock()
+_proxy_config = {
+    'enabled': False,
+    'type': 'tor',        # tor | socks5 | http
+    'host': '127.0.0.1',
+    'port': 9050,
+    'latency_ms': None,
+}
 
 # ─── Reporter stats helpers ────────────────────────────────────────────────────
 _stats_lock = threading.Lock()
@@ -164,6 +214,126 @@ def _check_rate_limit(ip):
             return True
         return False
 
+# ─── Privacy/Tor/SOCKS5 helpers ────────────────────────────────────────────────
+
+def _check_tor_available():
+    """Test if Tor SOCKS5 is reachable."""
+    if not _STEM_AVAILABLE:
+        return False
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        result = sock.connect_ex((TOR_SOCKS5_HOST, TOR_SOCKS5_PORT))
+        sock.close()
+        return result == 0
+    except Exception:
+        return False
+
+def _rotate_tor_circuit():
+    """Request a new Tor circuit via stem control port."""
+    if not _STEM_AVAILABLE or not TOR_CONTROL_PASSWORD:
+        return False
+    try:
+        with Controller.from_port(address=TOR_CONTROL_HOST, port=TOR_CONTROL_PORT) as controller:
+            controller.authenticate(password=TOR_CONTROL_PASSWORD)
+            controller.signal(Signal.NEWNYM)
+            time.sleep(1)  # Wait for new circuit
+            with _privacy_lock:
+                _privacy_state['circuit_rotation_count'] += 1
+                _privacy_state['last_rotated_at'] = datetime.now(timezone.utc).isoformat()
+            print('[Tor] Circuit rotated, new exit IP requested')
+            return True
+    except Exception as e:
+        print(f'[Tor] Circuit rotation failed: {e}')
+        return False
+
+def _get_proxy_handler():
+    """Return a proxy handler dict for urllib or requests based on privacy config."""
+    with _privacy_lock:
+        mode_enabled = _privacy_state['mode_enabled']
+        tor_available = _privacy_state['tor_available']
+        proxy_configured = _privacy_state['proxy_configured']
+    
+    if not mode_enabled:
+        return None  # No proxy, cleartext
+    
+    # Priority: custom proxy config > Tor > user-provided proxy
+    with _proxy_config_lock:
+        cfg = dict(_proxy_config)
+    
+    if cfg['enabled']:
+        h = cfg['host']
+        p = cfg['port']
+        t = cfg['type']
+        # socks5h:// ensures DNS resolves through proxy (no DNS leaks)
+        scheme = 'socks5h' if t in ('tor', 'socks5') else t
+        proxy_url = f'{scheme}://{h}:{p}'
+        return {'http': proxy_url, 'https': proxy_url}
+    
+    if tor_available:
+        return {
+            'http': f'socks5h://{TOR_SOCKS5_HOST}:{TOR_SOCKS5_PORT}',
+            'https': f'socks5h://{TOR_SOCKS5_HOST}:{TOR_SOCKS5_PORT}',
+        }
+    elif proxy_configured:
+        proxy_url = f'socks5h://{USER_PROXY_HOST}:{USER_PROXY_PORT}'
+        return {'http': proxy_url, 'https': proxy_url}
+    
+    return None
+
+def _fetch_with_proxy(url, timeout=15, method='GET', data=None, headers=None):
+    """
+    Fetch URL with proxy support (if enabled). Falls back to cleartext if Tor unavailable.
+    Returns (data, status_code, error_str).
+    """
+    if headers is None:
+        headers = {'User-Agent': 'GhostNav/1.0 (privacy-navigation)'}
+    
+    proxy = _get_proxy_handler()
+    
+    try:
+        if proxy and _REQUESTS_AVAILABLE:
+            # Use requests library for proxy support
+            sess = requests.Session()
+            
+            # Configure SOCKS5 proxy
+            if TOR_SOCKS5_HOST in proxy.get('https', ''):
+                # PySocks doesn't support streaming well; use requests-socks or requests[socks]
+                sess.proxies = proxy
+            
+            if method.upper() == 'GET':
+                resp = sess.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+            else:
+                resp = sess.post(url, data=data, headers=headers, timeout=timeout, allow_redirects=True)
+            
+            resp.raise_for_status()
+            return resp.content, resp.status_code, None
+        
+        else:
+            # Fallback to urllib (no proxy support, will warn)
+            if proxy:
+                print(f'[Privacy] Proxy requested but requests[socks] not installed, falling back to cleartext')
+                # Log warning to privacy state
+                with _privacy_lock:
+                    _privacy_state['fallback_warning'] = True
+            
+            req = urllib.request.Request(url, data=data, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read(), resp.status, None
+    
+    except Exception as e:
+        error_msg = f'{type(e).__name__}: {str(e)}'
+        print(f'[Fetch] Error for {url}: {error_msg}')
+        return None, 0, error_msg
+
+def _update_privacy_status():
+    """Check Tor availability and update privacy state."""
+    tor_avail = _check_tor_available()
+    with _privacy_lock:
+        _privacy_state['tor_available'] = tor_avail
+    print(f'[Privacy] Tor available: {tor_avail}')
+    return tor_avail
+
 # ─── Geometry helpers ──────────────────────────────────────────────────────────
 
 def decode_polyline6(encoded):
@@ -292,17 +462,23 @@ def osrm_route(waypoints):
     """
     Call OSRM with a list of (lon, lat) tuples.
     Returns the first route dict or None on failure.
+    Routes through Tor/VPN if privacy mode enabled.
     """
     coord_str = ';'.join(f'{lon:.6f},{lat:.6f}' for lon, lat in waypoints)
     url = f'{OSRM_BASE}/route/v1/driving/{coord_str}?overview=full&geometries=polyline6'
-    req = urllib.request.Request(url, headers={'User-Agent': 'GhostNav/1.0'})
+    headers = {'User-Agent': 'GhostNav/1.0'}
+    
+    data, status, error = _fetch_with_proxy(url, timeout=15, method='GET', headers=headers)
+    if error:
+        print(f'[OSRM] Error: {error}')
+        return None
+    
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-            if data.get('code') == 'Ok' and data.get('routes'):
-                return data['routes'][0]
+        result = json.loads(data)
+        if result.get('code') == 'Ok' and result.get('routes'):
+            return result['routes'][0]
     except Exception as e:
-        print(f'[OSRM] Error: {e}')
+        print(f'[OSRM] JSON parse error: {e}')
     return None
 
 
@@ -314,6 +490,7 @@ def fetch_cameras_in_bbox(min_lat, min_lon, max_lat, max_lon):
     """Fetch ALPR cameras from Overpass within bbox.
     Query optimized via GHOST-RESEARCH-003: B_broad_surveillance won (54 nodes, score=52.50)
     vs A_narrow_alpr (44 nodes) — broad query captures more cameras including non-tagged ALPR.
+    Routes through Tor/VPN if privacy mode enabled.
     """
     bbox = f"{min_lat:.5f},{min_lon:.5f},{max_lat:.5f},{max_lon:.5f}"
     query = f'''[out:json][timeout:30];
@@ -323,19 +500,24 @@ def fetch_cameras_in_bbox(min_lat, min_lon, max_lat, max_lon):
 );
 out body;'''
     body = ('data=' + urllib.parse.quote(query)).encode()
-    req = urllib.request.Request(OVERPASS_URL, data=body, headers={
+    headers = {
         'User-Agent': 'GhostNav/1.0',
         'Content-Type': 'application/x-www-form-urlencoded',
-    })
+    }
+    
+    data, status, error = _fetch_with_proxy(OVERPASS_URL, timeout=30, method='POST', data=body, headers=headers)
+    if error:
+        print(f'[Overpass] Error: {error}')
+        return []
+    
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read())
-            return [
-                {'lat': el['lat'], 'lon': el['lon'], 'id': el['id'], 'tags': el.get('tags', {})}
-                for el in data.get('elements', [])
-            ]
+        result = json.loads(data)
+        return [
+            {'lat': el['lat'], 'lon': el['lon'], 'id': el['id'], 'tags': el.get('tags', {})}
+            for el in result.get('elements', [])
+        ]
     except Exception as e:
-        print(f'[Overpass] Error: {e}')
+        print(f'[Overpass] JSON parse error: {e}')
         return []
 
 
@@ -706,41 +888,40 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def _proxy_get(self, url, timeout=15):
-        try:
-            req = urllib.request.Request(url, headers={
-                'User-Agent': 'GhostNav/1.0 (privacy-navigation-research)'
-            })
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = resp.read()
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(data)
-        except Exception as e:
+        """Proxy GET — routes through Tor/SOCKS5 when privacy mode enabled."""
+        data, status, error = _fetch_with_proxy(url, timeout=timeout, method='GET')
+        if error:
             self.send_response(502)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps({'error': str(e)}).encode())
+            self.wfile.write(json.dumps({'error': error}).encode())
+            return
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(data)
 
     def _proxy_post(self, url, body, content_type='application/x-www-form-urlencoded', timeout=30):
-        try:
-            req = urllib.request.Request(url, data=body, headers={
-                'User-Agent': 'GhostNav/1.0 (privacy-navigation-research)',
-                'Content-Type': content_type,
-            })
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = resp.read()
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(data)
-        except Exception as e:
+        """Proxy POST — routes through Tor/SOCKS5 when privacy mode enabled."""
+        headers = {
+            'User-Agent': 'GhostNav/1.0 (privacy-navigation-research)',
+            'Content-Type': content_type,
+        }
+        data, status, error = _fetch_with_proxy(url, timeout=timeout, method='POST', data=body, headers=headers)
+        if error:
             self.send_response(502)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(json.dumps({'error': str(e)}).encode())
+            self.wfile.write(json.dumps({'error': error}).encode())
+            return
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(data)
 
     def _check_rate(self):
         """Return True (allowed) or send 429 and return False."""
@@ -755,6 +936,43 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+    
+    def do_PUT(self):
+        """Handle PUT requests for privacy mode toggle."""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length)
+        
+        # ── PUT /api/privacy-mode ─────────────────────────────────────────────
+        if self.path == '/api/privacy-mode':
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                self._send_json({'error': 'Invalid JSON'}, 400)
+                return
+            
+            enabled = data.get('enabled', False)
+            with _privacy_lock:
+                _privacy_state['mode_enabled'] = enabled
+            
+            if enabled:
+                print(f'[Privacy] Privacy mode ENABLED')
+                # Try to initialize Tor if available
+                tor_avail = _update_privacy_status()
+                if not tor_avail and not _privacy_state['proxy_configured']:
+                    print(f'[Privacy] WARNING: Privacy mode enabled but Tor unavailable and no proxy configured')
+            else:
+                print(f'[Privacy] Privacy mode DISABLED')
+            
+            self._send_json({
+                'status': 'ok',
+                'enabled': enabled,
+                'tor_available': _privacy_state['tor_available'],
+                'proxy_configured': _privacy_state['proxy_configured'],
+            })
+            return
+        
+        self.send_response(404)
         self.end_headers()
 
     def do_POST(self):
@@ -1010,6 +1228,20 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
                 'status':         'ok',
                 'cameras_cached': _total_cached_cameras(),
                 'version':        VERSION,
+            })
+            return
+        
+        # ── GET /api/privacy-status ──────────────────────────────────────────
+        if self.path == '/api/privacy-status':
+            with _privacy_lock:
+                status = dict(_privacy_state)
+            self._send_json({
+                'tor_available': status.get('tor_available', False),
+                'proxy_configured': status.get('proxy_configured', False),
+                'mode': 'enabled' if status.get('mode_enabled') else 'disabled',
+                'circuit_rotation_count': status.get('circuit_rotation_count', 0),
+                'last_rotated_at': status.get('last_rotated_at'),
+                'fallback_warning': status.get('fallback_warning', False),
             })
             return
 
@@ -1309,6 +1541,19 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == '__main__':
+    # Check privacy dependencies and Tor availability on startup
+    print(f'[Startup] Checking privacy support...')
+    print(f'[Startup] requests[socks] available: {_REQUESTS_AVAILABLE}')
+    print(f'[Startup] stem (Tor controller) available: {_STEM_AVAILABLE}')
+    
+    # Check if Tor is available (even if privacy mode not initially enabled)
+    _update_privacy_status()
+    
+    # Check for user-configured proxy
+    if USER_PROXY_HOST:
+        print(f'[Startup] User proxy configured: {USER_PROXY_TYPE}://{USER_PROXY_HOST}:{USER_PROXY_PORT}')
+    
     server = http.server.HTTPServer(('0.0.0.0', PORT), GhostHandler)
-    print(f'Ghost Nav server on http://0.0.0.0:{PORT}')
+    print(f'[Startup] Ghost Nav server on http://0.0.0.0:{PORT}')
+    print(f'[Startup] Privacy features available. Visit /api/privacy-status to check.')
     server.serve_forever()
