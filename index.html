@@ -280,6 +280,86 @@
           <button id="close-camera-detail" class="btn btn-small">Close</button>
         </div>
 
+        <!-- ── GHOST-PUSH-ALERTS: Camera Alert Panel ───────────────────────── -->
+        <details id="ghost-alerts-panel" style="padding-top:12px;border-top:1px solid var(--border,#30363d)" open>
+          <summary style="cursor:pointer;font-size:12px;color:#8b949e;user-select:none;list-style:none;display:flex;align-items:center;gap:6px;margin-bottom:10px">
+            <span>🔔</span> <span style="color:#e5e5e5;font-weight:600">Live Camera Alerts</span>
+          </summary>
+
+          <!-- Notification permission + live alert toggle -->
+          <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+            <button id="ghost-notif-btn" class="btn btn-ghost" style="font-size:12px;padding:6px 10px;border:1px solid #30363d;border-radius:6px;cursor:pointer;background:rgba(34,197,94,0.08)">
+              🔔 Enable Camera Alerts
+            </button>
+            <button id="ghost-nav-toggle" class="btn btn-ghost" style="font-size:12px;padding:6px 10px;border:1px solid #30363d;border-radius:6px;cursor:pointer;background:rgba(34,197,94,0.08)">
+              📍 Start Live Alerts
+            </button>
+            <span id="ghost-proximity-badge" style="display:none;font-size:11px;font-family:monospace;padding:4px 8px;border-radius:4px;background:rgba(0,0,0,0.3)">
+              ✅ No cameras in range
+            </span>
+          </div>
+
+          <!-- Alert threshold -->
+          <div style="margin-bottom:12px">
+            <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:4px">
+              ALERT RADIUS: <span id="ghost-threshold-value" style="color:#e5e5e5">250m</span>
+            </label>
+            <input id="ghost-threshold-slider" type="range" min="100" max="500" step="50" value="250"
+              style="width:100%;accent-color:#22c55e" />
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:#666;margin-top:2px">
+              <span>100m</span><span>250m</span><span>500m</span>
+            </div>
+          </div>
+
+          <!-- Silent hours -->
+          <div style="margin-bottom:12px">
+            <label style="font-size:11px;color:#8b949e;display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input id="ghost-silent-toggle" type="checkbox" style="accent-color:#22c55e" />
+              Silent hours (pause alerts at night)
+            </label>
+            <div id="ghost-silent-hours-panel" style="display:none;margin-top:8px;display:flex;gap:8px;align-items:center">
+              <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#8b949e">
+                From <input id="ghost-silent-start" type="time" value="22:00"
+                  style="background:#0d1117;border:1px solid #30363d;color:#e5e5e5;padding:3px 6px;border-radius:4px;font-size:11px" />
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;font-size:11px;color:#8b949e">
+                To <input id="ghost-silent-end" type="time" value="07:00"
+                  style="background:#0d1117;border:1px solid #30363d;color:#e5e5e5;padding:3px 6px;border-radius:4px;font-size:11px" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent alerts log -->
+          <div>
+            <div style="font-size:11px;color:#8b949e;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">
+              <span>RECENT ALERTS</span>
+              <button id="ghost-sim-alert-btn" title="Simulate alert (test)" style="font-size:10px;background:none;border:1px solid #30363d;color:#8b949e;padding:2px 6px;border-radius:4px;cursor:pointer">⚡ Test</button>
+            </div>
+            <div id="ghost-recent-alerts" style="font-family:monospace;font-size:11px;display:flex;flex-direction:column;gap:4px">
+              <div class="ghost-no-alerts" style="color:#4b5563;font-style:italic">No alerts yet</div>
+            </div>
+          </div>
+        </details>
+
+        <style>
+          .ghost-alert-item {
+            display: grid;
+            grid-template-columns: auto 1fr auto auto;
+            gap: 6px;
+            align-items: center;
+            padding: 4px 8px;
+            background: rgba(34,197,94,0.06);
+            border: 1px solid rgba(34,197,94,0.15);
+            border-radius: 4px;
+            font-size: 11px;
+          }
+          .ghost-alert-time  { color: #4b5563; font-size: 10px; }
+          .ghost-alert-type  { color: #e5e5e5; font-weight: 600; }
+          .ghost-alert-dist  { color: #8b949e; }
+          .ghost-alert-prob  { font-weight: 700; }
+        </style>
+        <!-- ── END GHOST-PUSH-ALERTS ─────────────────────────────────────── -->
+
         <!-- Embed on your site -->
         <details id="embed-details" style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border,#30363d)">
           <summary style="cursor:pointer;font-size:12px;color:#8b949e;user-select:none;list-style:none;display:flex;align-items:center;gap:6px">

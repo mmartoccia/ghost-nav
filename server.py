@@ -1120,6 +1120,111 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
         content_length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_length)
 
+        # ── POST /api/proximity-check (GHOST-PUSH-ALERTS) ────────────────────
+        if self.path == '/api/proximity-check':
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                self._send_json({'error': 'Invalid JSON'}, 400)
+                return
+
+            lat = data.get('lat')
+            lon = data.get('lon')
+            radius_meters = data.get('radius_meters', 250)
+
+            try:
+                lat = float(lat)
+                lon = float(lon)
+                radius_meters = float(radius_meters)
+            except (TypeError, ValueError):
+                self._send_json({'error': 'lat, lon must be numbers'}, 400)
+                return
+
+            if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                self._send_json({'error': 'lat/lon out of range'}, 400)
+                return
+
+            radius_meters = max(50, min(2000, radius_meters))
+
+            # Build a bbox around the point large enough to cover the radius
+            lat_delta = radius_meters / 111320.0
+            lon_delta = radius_meters / (111320.0 * max(0.001, math.cos(math.radians(lat))))
+            min_lat = lat - lat_delta
+            max_lat = lat + lat_delta
+            min_lon = lon - lon_delta
+            max_lon = lon + lon_delta
+
+            cameras_in_bbox = fetch_cameras_cached(min_lat, min_lon, max_lat, max_lon)
+
+            # Filter to actual radius and enrich with distance + metadata
+            nearby = []
+            for cam in cameras_in_bbox:
+                dist = haversine(lat, lon, cam['lat'], cam['lon'])
+                if dist <= radius_meters:
+                    tags = cam.get('tags', {})
+                    # Determine camera type and operator
+                    cam_type = tags.get('surveillance:type', tags.get('man_made', 'ALPR'))
+                    operator = tags.get('operator', tags.get('surveillance', 'Unknown'))
+                    # Rough capture probability: closer = higher
+                    capture_prob = max(0.05, min(0.98, 1.0 - (dist / radius_meters) * 0.7))
+                    nearby.append({
+                        'id':           cam['id'],
+                        'lat':          cam['lat'],
+                        'lon':          cam['lon'],
+                        'distance_m':   round(dist, 1),
+                        'camera_type':  cam_type,
+                        'operator':     operator,
+                        'capture_prob': round(capture_prob, 2),
+                        'tags':         tags,
+                    })
+
+            # Sort by distance
+            nearby.sort(key=lambda c: c['distance_m'])
+
+            self._send_json({
+                'lat':          lat,
+                'lon':          lon,
+                'radius_meters': radius_meters,
+                'cameras':      nearby,
+                'count':        len(nearby),
+            })
+            return
+
+        # ── POST /api/alert-settings (GHOST-PUSH-ALERTS) ─────────────────────
+        # NOTE: Settings are client-side (localStorage). This endpoint is for
+        # server-side validation/defaults only; actual persistence is in browser.
+        if self.path == '/api/alert-settings':
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                self._send_json({'error': 'Invalid JSON'}, 400)
+                return
+
+            # Validate and clamp settings
+            threshold = data.get('threshold_meters', 250)
+            try:
+                threshold = int(threshold)
+            except (TypeError, ValueError):
+                threshold = 250
+            threshold = max(50, min(2000, threshold))
+
+            silent_start = data.get('silent_start', None)
+            silent_end   = data.get('silent_end', None)
+            cam_filter   = data.get('camera_type_filter', [])
+            if not isinstance(cam_filter, list):
+                cam_filter = []
+
+            self._send_json({
+                'status': 'ok',
+                'settings': {
+                    'threshold_meters':    threshold,
+                    'silent_start':        silent_start,
+                    'silent_end':          silent_end,
+                    'camera_type_filter':  cam_filter,
+                },
+            })
+            return
+
         # ── POST /api/v1/route ────────────────────────────────────────────────
         if self.path == '/api/v1/route':
             if not self._check_rate():
@@ -1396,6 +1501,19 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
             except FileNotFoundError:
                 self.send_response(404)
                 self.end_headers()
+            return
+
+        # ── GET /api/alert-settings (GHOST-PUSH-ALERTS) ──────────────────────
+        if self.path == '/api/alert-settings':
+            self._send_json({
+                'defaults': {
+                    'threshold_meters':    250,
+                    'silent_start':        None,
+                    'silent_end':          None,
+                    'camera_type_filter':  [],
+                },
+                'valid_thresholds': [100, 250, 500],
+            })
             return
 
         # ── GET /api/freshness ────────────────────────────────────────────────

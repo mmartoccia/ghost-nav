@@ -1,5 +1,5 @@
-// Ghost Nav Service Worker
-const CACHE_NAME = 'ghost-nav-v1';
+// Ghost Nav Service Worker — v2 (GHOST-PUSH-ALERTS)
+const CACHE_NAME = 'ghost-nav-v2';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -47,7 +47,6 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(event.request)
         .then(response => {
-          // Cache successful API responses as fallback
           if (response.ok) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
@@ -72,4 +71,77 @@ self.addEventListener('fetch', event => {
       });
     })
   );
+});
+
+// ─── Push Notifications (GHOST-PUSH-ALERTS) ──────────────────────────────────
+
+self.addEventListener('push', event => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (e) {
+    payload = { title: 'Ghost Alert', body: event.data ? event.data.text() : 'Camera nearby' };
+  }
+
+  const title = payload.title || '👻 Ghost — Camera Alert';
+  const options = {
+    body: payload.body || 'ALPR camera detected nearby',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: payload.camera_id || 'ghost-camera-alert',
+    renotify: true,
+    requireInteraction: false,
+    silent: payload.silent || false,
+    data: payload,
+    actions: [
+      { action: 'view', title: '🗺️ View Map' },
+      { action: 'dismiss', title: 'Dismiss' },
+    ],
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  if (event.action === 'dismiss') return;
+
+  // Focus or open the app
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
+  );
+});
+
+// ─── Message from app: show local notification directly ──────────────────────
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SHOW_CAMERA_ALERT') {
+    const payload = event.data.payload || {};
+    const title = payload.title || '👻 Ghost — Camera Alert';
+    const options = {
+      body: payload.body || 'ALPR camera detected nearby',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag: payload.camera_id || 'ghost-camera-alert',
+      renotify: true,
+      requireInteraction: false,
+      silent: payload.silent || false,
+      data: payload,
+      actions: [
+        { action: 'view', title: '🗺️ View Map' },
+        { action: 'dismiss', title: 'Dismiss' },
+      ],
+    };
+    self.registration.showNotification(title, options);
+  }
 });

@@ -2749,3 +2749,431 @@ document.addEventListener('DOMContentLoaded', () => {
     heatBtn.addEventListener('click', toggleHeatmap);
   }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GHOST-PUSH-ALERTS — Proximity Alert Engine
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function GhostPushAlerts() {
+  'use strict';
+
+  // ─── Constants ──────────────────────────────────────────────────────────────
+  const ALERT_DEBOUNCE_MS     = 60000;   // Don't re-alert same camera within 60s
+  const GEOLOCATION_INTERVAL  = 5000;    // Poll every 5s during active navigation
+  const PROXIMITY_ENDPOINT    = '/api/proximity-check';
+  const SETTINGS_KEY          = 'ghost-alert-settings';
+  const RECENT_ALERTS_MAX     = 5;
+
+  // ─── State ──────────────────────────────────────────────────────────────────
+  let _swRegistration       = null;
+  let _watchId              = null;
+  let _lastAlertedCameras   = {};   // camera_id → timestamp
+  let _recentAlerts         = [];   // last N alerts for sidebar
+  let _navigationActive     = false;
+  let _lastPosition         = null;
+  let _alertSettings        = loadAlertSettings();
+
+  // ─── Settings ───────────────────────────────────────────────────────────────
+  function defaultSettings() {
+    return {
+      threshold_meters:   250,
+      silent_hours:       false,
+      silent_start:       '22:00',
+      silent_end:         '07:00',
+      camera_type_filter: [],
+    };
+  }
+
+  function loadAlertSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (raw) {
+        return Object.assign(defaultSettings(), JSON.parse(raw));
+      }
+    } catch (e) { /* ignore */ }
+    return defaultSettings();
+  }
+
+  function saveAlertSettings(settings) {
+    _alertSettings = Object.assign(_alertSettings, settings);
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(_alertSettings));
+    } catch (e) { /* ignore */ }
+    // Also persist to server for validation (fire-and-forget)
+    fetch('/api/alert-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_alertSettings),
+    }).catch(() => {});
+  }
+
+  // ─── Silent hours check ──────────────────────────────────────────────────────
+  function isSilentHours() {
+    if (!_alertSettings.silent_hours) return false;
+    const now   = new Date();
+    const hh    = now.getHours();
+    const mm    = now.getMinutes();
+    const cur   = hh * 60 + mm;
+    const [sh, sm] = (_alertSettings.silent_start || '22:00').split(':').map(Number);
+    const [eh, em] = (_alertSettings.silent_end   || '07:00').split(':').map(Number);
+    const start = sh * 60 + sm;
+    const end   = eh * 60 + em;
+    if (start <= end) return cur >= start && cur < end;
+    return cur >= start || cur < end;   // wraps midnight
+  }
+
+  // ─── Service Worker registration ─────────────────────────────────────────────
+  async function initServiceWorker() {
+    if (!('serviceWorker' in navigator)) return null;
+    try {
+      _swRegistration = await navigator.serviceWorker.ready;
+      return _swRegistration;
+    } catch (e) {
+      console.warn('[GhostAlerts] SW not ready:', e);
+      return null;
+    }
+  }
+
+  // ─── Notification permission ─────────────────────────────────────────────────
+  async function requestNotificationPermission() {
+    if (!('Notification' in window)) return 'unsupported';
+    if (Notification.permission === 'granted') return 'granted';
+    if (Notification.permission === 'denied')  return 'denied';
+    const result = await Notification.requestPermission();
+    updatePermissionUI(result);
+    return result;
+  }
+
+  function updatePermissionUI(permission) {
+    const btn = document.getElementById('ghost-notif-btn');
+    if (!btn) return;
+    if (permission === 'granted') {
+      btn.textContent  = '🔔 Notifications ON';
+      btn.style.color  = '#22c55e';
+      btn.disabled     = true;
+    } else if (permission === 'denied') {
+      btn.textContent  = '🔕 Notifications blocked';
+      btn.style.color  = '#ef4444';
+      btn.disabled     = true;
+    } else {
+      btn.textContent  = '🔔 Enable Camera Alerts';
+      btn.style.color  = '#facc15';
+      btn.disabled     = false;
+    }
+  }
+
+  // ─── Send notification via service worker or fallback ────────────────────────
+  async function sendCameraNotification(camera) {
+    if (Notification.permission !== 'granted') return;
+    if (isSilentHours()) return;
+
+    const title = '👻 Ghost — Camera Alert';
+    const distStr = camera.distance_m < 1000
+      ? `${Math.round(camera.distance_m)}m`
+      : `${(camera.distance_m / 1000).toFixed(1)}km`;
+    const body = [
+      `${camera.camera_type || 'ALPR'} camera ${distStr} away`,
+      `Operator: ${camera.operator || 'Unknown'}`,
+      `Capture probability: ${Math.round((camera.capture_prob || 0.5) * 100)}%`,
+    ].join(' · ');
+
+    const payload = {
+      title,
+      body,
+      camera_id:    String(camera.id),
+      silent:       false,
+      distance_m:   camera.distance_m,
+      camera_type:  camera.camera_type,
+      operator:     camera.operator,
+      capture_prob: camera.capture_prob,
+    };
+
+    // Try via service worker message for best compatibility
+    if (_swRegistration && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type:    'SHOW_CAMERA_ALERT',
+        payload: payload,
+      });
+    } else {
+      // Fallback: direct Notification API
+      try {
+        new Notification(title, {
+          body,
+          icon: '/icon-192.png',
+          tag:  `ghost-cam-${camera.id}`,
+        });
+      } catch (e) { /* ignore */ }
+    }
+  }
+
+  // ─── Recent alerts log ────────────────────────────────────────────────────────
+  function addRecentAlert(camera) {
+    const alert = {
+      id:          camera.id,
+      time:        new Date().toLocaleTimeString(),
+      camera_type: camera.camera_type || 'ALPR',
+      operator:    camera.operator    || 'Unknown',
+      distance_m:  camera.distance_m,
+      capture_prob: camera.capture_prob,
+    };
+    _recentAlerts.unshift(alert);
+    if (_recentAlerts.length > RECENT_ALERTS_MAX) {
+      _recentAlerts = _recentAlerts.slice(0, RECENT_ALERTS_MAX);
+    }
+    renderRecentAlerts();
+  }
+
+  function renderRecentAlerts() {
+    const container = document.getElementById('ghost-recent-alerts');
+    if (!container) return;
+    if (_recentAlerts.length === 0) {
+      container.innerHTML = '<div class="ghost-no-alerts">No alerts yet</div>';
+      return;
+    }
+    container.innerHTML = _recentAlerts.map(a => {
+      const distStr = a.distance_m < 1000
+        ? `${Math.round(a.distance_m)}m`
+        : `${(a.distance_m / 1000).toFixed(1)}km`;
+      const probPct = Math.round((a.capture_prob || 0.5) * 100);
+      const color   = probPct >= 80 ? '#ef4444' : probPct >= 50 ? '#facc15' : '#22c55e';
+      return `<div class="ghost-alert-item">
+        <span class="ghost-alert-time">${a.time}</span>
+        <span class="ghost-alert-type">${a.camera_type}</span>
+        <span class="ghost-alert-dist">${distStr}</span>
+        <span class="ghost-alert-prob" style="color:${color}">${probPct}%</span>
+      </div>`;
+    }).join('');
+  }
+
+  // ─── Proximity check ─────────────────────────────────────────────────────────
+  async function checkProximity(lat, lon) {
+    const threshold = _alertSettings.threshold_meters || 250;
+    let data;
+    try {
+      const resp = await fetch(PROXIMITY_ENDPOINT, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ lat, lon, radius_meters: threshold }),
+      });
+      if (!resp.ok) return;
+      data = await resp.json();
+    } catch (e) {
+      return;
+    }
+
+    const cameras = data.cameras || [];
+    const now = Date.now();
+
+    for (const cam of cameras) {
+      const camId = String(cam.id);
+
+      // Apply camera type filter if set
+      const filter = _alertSettings.camera_type_filter || [];
+      if (filter.length > 0 && !filter.includes(cam.camera_type)) continue;
+
+      // Debounce: skip if alerted this camera within 60s
+      const lastAlerted = _lastAlertedCameras[camId];
+      if (lastAlerted && now - lastAlerted < ALERT_DEBOUNCE_MS) continue;
+
+      // Record alert time
+      _lastAlertedCameras[camId] = now;
+
+      // Send notification
+      await sendCameraNotification(cam);
+
+      // Log to recent alerts
+      addRecentAlert(cam);
+
+      // Only alert the closest camera per check to avoid spam
+      break;
+    }
+
+    // Update proximity status badge
+    updateProximityBadge(cameras.length);
+  }
+
+  function updateProximityBadge(count) {
+    const badge = document.getElementById('ghost-proximity-badge');
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent  = `⚠️ ${count} camera${count > 1 ? 's' : ''} nearby`;
+      badge.style.color  = '#ef4444';
+      badge.style.display = 'inline-block';
+    } else {
+      badge.textContent  = '✅ No cameras in range';
+      badge.style.color  = '#22c55e';
+      badge.style.display = 'inline-block';
+    }
+  }
+
+  // ─── Geolocation watching ─────────────────────────────────────────────────────
+  function startLocationWatch() {
+    if (!navigator.geolocation) {
+      console.warn('[GhostAlerts] Geolocation not available');
+      return;
+    }
+    if (_watchId !== null) return;  // already watching
+
+    _navigationActive = true;
+    updateNavigationUI(true);
+
+    _watchId = navigator.geolocation.watchPosition(
+      position => {
+        const { latitude: lat, longitude: lon, accuracy } = position.coords;
+        _lastPosition = { lat, lon, accuracy };
+        checkProximity(lat, lon);
+      },
+      err => {
+        console.warn('[GhostAlerts] Geolocation error:', err.message);
+        if (err.code === err.PERMISSION_DENIED) {
+          stopLocationWatch();
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge:         GEOLOCATION_INTERVAL,
+        timeout:            10000,
+      }
+    );
+  }
+
+  function stopLocationWatch() {
+    if (_watchId !== null) {
+      navigator.geolocation.clearWatch(_watchId);
+      _watchId = null;
+    }
+    _navigationActive = false;
+    updateNavigationUI(false);
+    const badge = document.getElementById('ghost-proximity-badge');
+    if (badge) badge.style.display = 'none';
+  }
+
+  function updateNavigationUI(active) {
+    const btn = document.getElementById('ghost-nav-toggle');
+    if (!btn) return;
+    btn.textContent = active ? '🛑 Stop Live Alerts' : '📍 Start Live Alerts';
+    btn.style.background = active ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)';
+  }
+
+  // ─── Alert settings UI ────────────────────────────────────────────────────────
+  function initAlertSettingsUI() {
+    // Threshold slider
+    const slider = document.getElementById('ghost-threshold-slider');
+    const sliderVal = document.getElementById('ghost-threshold-value');
+    if (slider && sliderVal) {
+      slider.value   = _alertSettings.threshold_meters || 250;
+      sliderVal.textContent = (slider.value) + 'm';
+      slider.addEventListener('input', () => {
+        sliderVal.textContent = slider.value + 'm';
+      });
+      slider.addEventListener('change', () => {
+        saveAlertSettings({ threshold_meters: parseInt(slider.value) });
+      });
+    }
+
+    // Silent hours toggle
+    const silentToggle = document.getElementById('ghost-silent-toggle');
+    if (silentToggle) {
+      silentToggle.checked = !!_alertSettings.silent_hours;
+      silentToggle.addEventListener('change', () => {
+        saveAlertSettings({ silent_hours: silentToggle.checked });
+        const silentPanel = document.getElementById('ghost-silent-hours-panel');
+        if (silentPanel) {
+          silentPanel.style.display = silentToggle.checked ? 'block' : 'none';
+        }
+      });
+    }
+
+    // Silent hours times
+    const silentStart = document.getElementById('ghost-silent-start');
+    const silentEnd   = document.getElementById('ghost-silent-end');
+    if (silentStart) {
+      silentStart.value = _alertSettings.silent_start || '22:00';
+      silentStart.addEventListener('change', () => {
+        saveAlertSettings({ silent_start: silentStart.value });
+      });
+    }
+    if (silentEnd) {
+      silentEnd.value = _alertSettings.silent_end || '07:00';
+      silentEnd.addEventListener('change', () => {
+        saveAlertSettings({ silent_end: silentEnd.value });
+      });
+    }
+
+    // Silent hours panel visibility
+    const silentPanel = document.getElementById('ghost-silent-hours-panel');
+    if (silentPanel) {
+      silentPanel.style.display = _alertSettings.silent_hours ? 'block' : 'none';
+    }
+
+    // Enable notification button
+    const notifBtn = document.getElementById('ghost-notif-btn');
+    if (notifBtn) {
+      updatePermissionUI(Notification.permission);
+      notifBtn.addEventListener('click', requestNotificationPermission);
+    }
+
+    // Nav toggle
+    const navToggle = document.getElementById('ghost-nav-toggle');
+    if (navToggle) {
+      navToggle.addEventListener('click', () => {
+        if (_navigationActive) {
+          stopLocationWatch();
+        } else {
+          requestNotificationPermission().then(perm => {
+            if (perm === 'granted') {
+              startLocationWatch();
+            }
+          });
+        }
+      });
+    }
+
+    // Simulate alert button (dev/testing)
+    const simBtn = document.getElementById('ghost-sim-alert-btn');
+    if (simBtn) {
+      simBtn.addEventListener('click', () => {
+        const fakeCamera = {
+          id:          'sim-' + Date.now(),
+          camera_type: 'ALPR',
+          operator:    'Flock Safety (Simulated)',
+          distance_m:  Math.round(Math.random() * 200 + 30),
+          capture_prob: 0.72,
+          lat:         0,
+          lon:         0,
+        };
+        sendCameraNotification(fakeCamera);
+        addRecentAlert(fakeCamera);
+      });
+    }
+  }
+
+  // ─── Boot ─────────────────────────────────────────────────────────────────────
+  async function init() {
+    await initServiceWorker();
+    updatePermissionUI(Notification.permission);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initAlertSettingsUI();
+      renderRecentAlerts();
+    });
+
+    // If DOM already loaded
+    if (document.readyState !== 'loading') {
+      initAlertSettingsUI();
+      renderRecentAlerts();
+    }
+  }
+
+  init();
+
+  // Expose for debugging
+  window.GhostAlerts = {
+    start:    startLocationWatch,
+    stop:     stopLocationWatch,
+    settings: _alertSettings,
+    save:     saveAlertSettings,
+    simulate: () => document.getElementById('ghost-sim-alert-btn') && document.getElementById('ghost-sim-alert-btn').click(),
+  };
+
+})();
