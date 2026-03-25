@@ -3177,3 +3177,297 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
 })();
+
+// ─── GhostOfflineManager (GHOST-OFFLINE) ─────────────────────────────────────
+// Handles: offline indicator, cache management, background sync, tile pre-warming
+(function GhostOfflineManager() {
+  'use strict';
+
+  // ── State ────────────────────────────────────────────────────────────────────
+  let _isOffline          = !navigator.onLine;
+  let _sw                 = null;    // ServiceWorkerRegistration
+  let _cacheSize          = null;    // bytes (null = unknown)
+  let _tileCount          = 0;
+  let _syncPending        = false;
+  let _offlineCameraData  = null;    // { cameras, count, bbox, exported_at }
+
+  // ── Constants ──────────────────────────────────────────────────────────────
+  const CAMERA_CACHE_KEY  = 'ghost-offline-cameras';
+  const CAMERA_META_KEY   = 'ghost-offline-meta';
+
+  // ── Connectivity detection ─────────────────────────────────────────────────
+  function setOffline(offline) {
+    if (_isOffline === offline) return;
+    _isOffline = offline;
+    renderOfflineBanner();
+    if (!offline) {
+      // Back online — trigger background sync
+      scheduleSync();
+    }
+  }
+
+  window.addEventListener('online',  () => setOffline(false));
+  window.addEventListener('offline', () => setOffline(true));
+
+  // ── SW message listener ────────────────────────────────────────────────────
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', event => {
+      const { type, bytes, tileCount, fetched, total } = event.data || {};
+      switch (type) {
+        case 'CACHE_SIZE_RESULT':
+          _cacheSize  = bytes || 0;
+          _tileCount  = tileCount || 0;
+          renderCacheUI();
+          break;
+        case 'CACHE_REGION_START':
+          updateDownloadProgress(0, total, 'Downloading tiles…');
+          break;
+        case 'CACHE_REGION_PROGRESS':
+          updateDownloadProgress(fetched, total, 'Downloading tiles…');
+          break;
+        case 'CACHE_REGION_DONE':
+          updateDownloadProgress(fetched, total, 'Done!');
+          requestCacheSize();
+          break;
+        case 'OFFLINE_CACHE_CLEARED':
+          _cacheSize = 0; _tileCount = 0;
+          renderCacheUI();
+          break;
+        case 'GHOST_SYNC_START':
+          showSyncStatus('🔄 Syncing camera data…');
+          break;
+        case 'GHOST_SYNC_DONE':
+          showSyncStatus('✅ Camera data updated');
+          loadOfflineCameraCache();
+          break;
+      }
+    });
+  }
+
+  // ── Offline banner ─────────────────────────────────────────────────────────
+  function renderOfflineBanner() {
+    let banner = document.getElementById('ghost-offline-banner');
+    if (!banner) return;
+    if (_isOffline) {
+      banner.style.display = 'flex';
+      banner.textContent   = '📵 Offline — using cached map & camera data';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  // ── Sync status toast ──────────────────────────────────────────────────────
+  function showSyncStatus(msg) {
+    const el = document.getElementById('ghost-sync-status');
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.opacity = '1';
+    setTimeout(() => { el.style.opacity = '0'; }, 3000);
+  }
+
+  // ── Request cache size from SW ─────────────────────────────────────────────
+  function requestCacheSize() {
+    if (!_sw || !_sw.active) return;
+    _sw.active.postMessage({ type: 'GET_CACHE_SIZE' });
+  }
+
+  // ── Format bytes helper ────────────────────────────────────────────────────
+  function fmtBytes(b) {
+    if (b == null) return '—';
+    if (b < 1024)        return b + ' B';
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+    return (b / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  // ── Render cache management UI ─────────────────────────────────────────────
+  function renderCacheUI() {
+    const sizeEl   = document.getElementById('ghost-cache-size');
+    const countEl  = document.getElementById('ghost-tile-count');
+    const metaEl   = document.getElementById('ghost-camera-meta');
+
+    if (sizeEl)  sizeEl.textContent  = fmtBytes(_cacheSize);
+    if (countEl) countEl.textContent = _tileCount + ' tiles';
+
+    const meta = _offlineCameraData;
+    if (metaEl && meta) {
+      const ago = meta.exported_at
+        ? Math.round((Date.now() - new Date(meta.exported_at).getTime()) / 60000) + 'm ago'
+        : 'unknown';
+      metaEl.textContent = `${meta.count || 0} cameras cached · ${ago}`;
+    } else if (metaEl) {
+      const stored = localStorage.getItem(CAMERA_META_KEY);
+      if (stored) {
+        try {
+          const m = JSON.parse(stored);
+          const ago = m.exported_at
+            ? Math.round((Date.now() - new Date(m.exported_at).getTime()) / 60000) + 'm ago'
+            : 'unknown';
+          metaEl.textContent = `${m.count || 0} cameras cached · ${ago}`;
+        } catch (_) {}
+      }
+    }
+  }
+
+  // ── Update tile download progress ──────────────────────────────────────────
+  function updateDownloadProgress(fetched, total, msg) {
+    const bar  = document.getElementById('ghost-download-bar');
+    const prog = document.getElementById('ghost-download-progress');
+    const lbl  = document.getElementById('ghost-download-label');
+    if (lbl) lbl.textContent = msg;
+    if (prog && total > 0) {
+      const pct = Math.round((fetched / total) * 100);
+      prog.style.width = pct + '%';
+      prog.textContent = pct + '%';
+    }
+    if (bar) bar.style.display = total > 0 ? 'block' : 'none';
+  }
+
+  // ── Pre-warm tiles for bbox ────────────────────────────────────────────────
+  function cacheRegion(minLat, minLon, maxLat, maxLon, minZoom, maxZoom) {
+    if (!_sw || !_sw.active) return;
+    _sw.active.postMessage({
+      type: 'CACHE_REGION',
+      payload: { minLat, minLon, maxLat, maxLon, minZoom, maxZoom },
+    });
+  }
+
+  // ── Clear all offline caches ────────────────────────────────────────────────
+  function clearOfflineCache() {
+    if (_sw && _sw.active) {
+      _sw.active.postMessage({ type: 'CLEAR_OFFLINE_CACHE' });
+    }
+    localStorage.removeItem(CAMERA_CACHE_KEY);
+    localStorage.removeItem(CAMERA_META_KEY);
+    _offlineCameraData = null;
+    renderCacheUI();
+  }
+
+  // ── Load camera data into localStorage for offline use ────────────────────
+  async function loadOfflineCameraCache() {
+    try {
+      const res = await fetch('/api/offline-cache');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      // Store in localStorage (cameras as JSON, meta separately)
+      localStorage.setItem(CAMERA_CACHE_KEY, JSON.stringify(data.cameras || []));
+      localStorage.setItem(CAMERA_META_KEY, JSON.stringify({
+        count:       data.count,
+        bbox:        data.bbox,
+        exported_at: data.exported_at,
+      }));
+      _offlineCameraData = data;
+      renderCacheUI();
+      showSyncStatus(`✅ ${data.count} cameras cached offline`);
+    } catch (e) {
+      console.warn('[GhostOffline] Camera cache load failed:', e);
+    }
+  }
+
+  // ── Schedule background sync via SW ───────────────────────────────────────
+  async function scheduleSync() {
+    if (_syncPending) return;
+    _syncPending = true;
+    try {
+      if (_sw && 'sync' in _sw) {
+        await _sw.sync.register('ghost-camera-sync');
+        console.log('[GhostOffline] Background sync registered');
+      } else {
+        // Fallback: load directly if sync API unavailable
+        await loadOfflineCameraCache();
+      }
+    } catch (e) {
+      console.warn('[GhostOffline] Sync registration failed, loading directly:', e);
+      await loadOfflineCameraCache();
+    }
+    _syncPending = false;
+  }
+
+  // ── Cache current map view ─────────────────────────────────────────────────
+  function cacheCurrentView() {
+    if (typeof map === 'undefined') return;
+    const bounds = map.getBounds();
+    const pad    = 0.05;
+    cacheRegion(
+      bounds.getSouth() - pad,
+      bounds.getWest()  - pad,
+      bounds.getNorth() + pad,
+      bounds.getEast()  + pad,
+      map.getZoom() - 1 || 10,
+      Math.min(map.getZoom() + 1, 16)
+    );
+  }
+
+  // ── Init UI bindings ──────────────────────────────────────────────────────
+  function bindUI() {
+    // Clear cache button
+    const clearBtn = document.getElementById('ghost-cache-clear-btn');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (confirm('Clear all cached map tiles and camera data?')) {
+          clearOfflineCache();
+        }
+      });
+    }
+
+    // Download current view button
+    const dlBtn = document.getElementById('ghost-cache-region-btn');
+    if (dlBtn) {
+      dlBtn.addEventListener('click', () => {
+        cacheCurrentView();
+        loadOfflineCameraCache();
+      });
+    }
+
+    // Refresh camera cache button
+    const refreshBtn = document.getElementById('ghost-camera-refresh-btn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => loadOfflineCameraCache());
+    }
+  }
+
+  // ── Bootstrap ─────────────────────────────────────────────────────────────
+  async function init() {
+    // Wait for SW registration (already done by GhostAlerts module)
+    if ('serviceWorker' in navigator) {
+      try {
+        _sw = await navigator.serviceWorker.ready;
+        requestCacheSize();
+      } catch (_) {}
+    }
+
+    renderOfflineBanner();
+    renderCacheUI();
+
+    // Load camera data when online
+    if (!_isOffline) {
+      // Delay to not compete with initial map load
+      setTimeout(loadOfflineCameraCache, 5000);
+    }
+
+    // Bind UI after DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bindUI);
+    } else {
+      bindUI();
+    }
+  }
+
+  init();
+
+  // Expose for debugging + external use
+  window.GhostOffline = {
+    cacheRegion,
+    cacheCurrentView,
+    clearCache:     clearOfflineCache,
+    loadCameras:    loadOfflineCameraCache,
+    scheduleSync,
+    getCacheSize:   requestCacheSize,
+    getLocalCameras: () => {
+      try {
+        return JSON.parse(localStorage.getItem(CAMERA_CACHE_KEY) || '[]');
+      } catch (_) { return []; }
+    },
+    isOffline: () => _isOffline,
+  };
+
+})();

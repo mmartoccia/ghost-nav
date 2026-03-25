@@ -1521,6 +1521,72 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(get_freshness())
             return
 
+        # ── GET /api/offline-cache (GHOST-OFFLINE) ────────────────────────────
+        # Returns camera data for a bounding box as JSON for local storage.
+        # Query params: min_lat, min_lon, max_lat, max_lon (defaults to a
+        #   broad bbox covering the user's last-known area or Summerville, SC).
+        # Also returns metadata for the cache management UI.
+        if self.path.split('?')[0] == '/api/offline-cache':
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+
+            def _qf(name, default):
+                vals = params.get(name)
+                try:
+                    return float(vals[0]) if vals else default
+                except (ValueError, TypeError):
+                    return default
+
+            # Default: Summerville, SC broad bbox (~50km radius)
+            min_lat = _qf('min_lat', 32.7)
+            min_lon = _qf('min_lon', -80.6)
+            max_lat = _qf('max_lat', 33.3)
+            max_lon = _qf('max_lon', -79.8)
+
+            # Clamp bbox size to prevent overload (max ~1 degree = ~111km)
+            lat_span = max_lat - min_lat
+            lon_span = max_lon - min_lon
+            if lat_span > 1.5:
+                center_lat = (min_lat + max_lat) / 2
+                min_lat = center_lat - 0.75
+                max_lat = center_lat + 0.75
+            if lon_span > 1.5:
+                center_lon = (min_lon + max_lon) / 2
+                min_lon = center_lon - 0.75
+                max_lon = center_lon + 0.75
+
+            cameras = fetch_cameras_cached(min_lat, min_lon, max_lat, max_lon)
+
+            # Also include confirmed community-reported cameras
+            confirmed = fetch_confirmed_reported_cameras()
+            existing_ids = {c['id'] for c in cameras}
+            for rc in confirmed:
+                if rc['id'] not in existing_ids:
+                    cameras.append({
+                        'id':   rc['id'],
+                        'lat':  rc['lat'],
+                        'lon':  rc['lon'],
+                        'tags': {
+                            'man_made': 'surveillance',
+                            'operator': rc.get('operator', 'Unknown'),
+                            'note':     f"Community reported: {rc.get('type', 'Unknown')}",
+                        },
+                    })
+
+            freshness = get_freshness()
+
+            self._send_json({
+                'cameras':    cameras,
+                'count':      len(cameras),
+                'bbox': {
+                    'min_lat': min_lat, 'min_lon': min_lon,
+                    'max_lat': max_lat, 'max_lon': max_lon,
+                },
+                'freshness':  freshness,
+                'exported_at': datetime.now(timezone.utc).isoformat(),
+            })
+            return
+
         # ── GET /api/v1/health ────────────────────────────────────────────────
         if self.path == '/api/v1/health':
             self._send_json({

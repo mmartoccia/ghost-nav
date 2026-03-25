@@ -54,6 +54,14 @@
       transition:opacity 0.3s ease;
     ">🔗 Link copied!</div>
 
+    <!-- Offline Banner (GHOST-OFFLINE) -->
+    <div id="ghost-offline-banner" style="
+      display:none;align-items:center;justify-content:center;gap:8px;
+      background:rgba(239,68,68,0.15);border-bottom:1px solid rgba(239,68,68,0.3);
+      padding:6px 16px;font-family:monospace;font-size:12px;color:#fca5a5;
+      text-align:center;z-index:900;
+    "></div>
+
     <!-- Commute Banner (shown when a saved commute exists) -->
     <div id="commute-banner" class="hidden">
       <span class="commute-banner-icon">🏠</span>
@@ -173,6 +181,83 @@
                 spellcheck="false"
               />
               <div class="search-dropdown hidden" id="end-dropdown"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Multi-Stop Mode Toggle -->
+        <div id="multistop-toggle-row" style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;margin-top:4px;border-top:1px solid #1e293b">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#8b949e">
+            <input type="checkbox" id="multistop-mode-toggle" style="accent-color:#22c55e" />
+            <span style="color:#e5e5e5;font-weight:600">🛣️ Multi-Stop Mode</span>
+          </label>
+          <span style="font-size:10px;color:#4b5563">up to 8 stops</span>
+        </div>
+
+        <!-- Multi-Stop Panel (hidden by default) -->
+        <div id="multistop-panel" style="display:none;margin-top:8px;padding:12px;background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);border-radius:8px">
+          <div style="font-size:11px;color:#8b949e;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+            <span>WAYPOINTS <span id="multistop-count" style="color:#22c55e">0</span></span>
+            <button id="multistop-add-btn" class="btn btn-ghost" style="font-size:11px;padding:3px 8px;border:1px solid rgba(34,197,94,0.4)">+ Add Stop</button>
+          </div>
+
+          <!-- Stops list (Start + waypoints + End always shown) -->
+          <div id="multistop-stops-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+            <!-- Stops inserted dynamically -->
+          </div>
+
+          <!-- Alpha/Beta Slider for speed vs privacy tradeoff -->
+          <div style="margin-bottom:10px">
+            <label style="font-size:11px;color:#8b949e;display:block;margin-bottom:4px">
+              PRIORITY: <span id="multistop-priority-label" style="color:#22c55e">Balanced</span>
+            </label>
+            <input id="multistop-alpha-slider" type="range" min="0" max="100" value="50"
+              style="width:100%;accent-color:#22c55e" />
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:#666;margin-top:2px">
+              <span>⚡ Speed</span><span>Balanced</span><span>🔒 Privacy</span>
+            </div>
+          </div>
+
+          <!-- Action buttons -->
+          <div style="display:flex;gap:6px;margin-bottom:10px">
+            <button id="multistop-route-btn" class="btn btn-ghost" style="flex:1;font-size:11px;padding:6px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.4);color:#22c55e;font-weight:600">
+              🗺️ Calculate Route
+            </button>
+            <button id="multistop-reorder-btn" class="btn btn-ghost" style="flex:1;font-size:11px;padding:6px;border:1px solid #30363d">
+              ♻️ Suggest Reorder
+            </button>
+          </div>
+
+          <!-- Multi-stop results panel -->
+          <div id="multistop-results" style="display:none">
+            <div style="font-size:11px;color:#8b949e;margin-bottom:8px;font-weight:600">ROUTE COMPARISON</div>
+
+            <!-- Fastest multi-stop -->
+            <div id="multistop-fastest-card" style="margin-bottom:8px;padding:10px;background:rgba(107,114,128,0.1);border:1px solid #374151;border-radius:6px">
+              <div style="font-size:11px;color:#9ca3af;font-weight:600;margin-bottom:6px">⚡ FASTEST ORDER</div>
+              <div id="multistop-fastest-stats" style="font-size:11px;color:#e5e5e5"></div>
+              <div id="multistop-fastest-legs" style="margin-top:6px"></div>
+            </div>
+
+            <!-- Privacy multi-stop -->
+            <div id="multistop-privacy-card" style="padding:10px;background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.25);border-radius:6px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <div style="font-size:11px;color:#22c55e;font-weight:600">👻 PRIVACY ORDER</div>
+                <span id="multistop-savings-badge" style="display:none;font-size:10px;font-family:monospace;padding:2px 6px;background:rgba(34,197,94,0.15);border-radius:4px;color:#22c55e"></span>
+              </div>
+              <div id="multistop-privacy-stats" style="font-size:11px;color:#e5e5e5"></div>
+              <div id="multistop-privacy-legs" style="margin-top:6px"></div>
+              <div id="multistop-reorder-suggestion" style="display:none;margin-top:8px;padding:8px;background:rgba(34,197,94,0.08);border-radius:4px;font-size:11px;color:#22c55e"></div>
+            </div>
+
+            <!-- Show on map buttons -->
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <button id="multistop-show-fastest" class="btn btn-ghost" style="flex:1;font-size:11px;padding:5px;border:1px solid #374151">
+                Show Fastest
+              </button>
+              <button id="multistop-show-privacy" class="btn btn-ghost" style="flex:1;font-size:11px;padding:5px;border:1px solid rgba(34,197,94,0.4);color:#22c55e">
+                Show Privacy
+              </button>
             </div>
           </div>
         </div>
@@ -359,6 +444,65 @@
           .ghost-alert-prob  { font-weight: 700; }
         </style>
         <!-- ── END GHOST-PUSH-ALERTS ─────────────────────────────────────── -->
+
+        <!-- ── GHOST-OFFLINE: Cache Management Panel ───────────────────────── -->
+        <details id="ghost-offline-panel" style="padding-top:12px;border-top:1px solid var(--border,#30363d)">
+          <summary style="cursor:pointer;font-size:12px;color:#8b949e;user-select:none;list-style:none;display:flex;align-items:center;gap:6px;margin-bottom:10px">
+            <span>📥</span> <span style="color:#e5e5e5;font-weight:600">Offline Cache</span>
+          </summary>
+
+          <!-- Cache stats -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;font-size:11px;font-family:monospace">
+              <div style="color:#8b949e;margin-bottom:2px">CACHE SIZE</div>
+              <div id="ghost-cache-size" style="color:#e5e5e5;font-weight:700">—</div>
+            </div>
+            <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:8px;font-size:11px;font-family:monospace">
+              <div style="color:#8b949e;margin-bottom:2px">MAP TILES</div>
+              <div id="ghost-tile-count" style="color:#e5e5e5;font-weight:700">—</div>
+            </div>
+          </div>
+
+          <!-- Camera cache status -->
+          <div style="font-size:11px;color:#8b949e;margin-bottom:8px">
+            CAMERA DATA: <span id="ghost-camera-meta" style="color:#e5e5e5">Not cached</span>
+          </div>
+
+          <!-- Actions -->
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+            <button id="ghost-cache-region-btn" class="btn btn-ghost" style="font-size:12px;padding:6px 10px;border:1px solid #30363d;border-radius:6px;cursor:pointer;background:rgba(34,197,94,0.08)">
+              📥 Cache current map view
+            </button>
+            <button id="ghost-camera-refresh-btn" class="btn btn-ghost" style="font-size:12px;padding:6px 10px;border:1px solid #30363d;border-radius:6px;cursor:pointer;background:rgba(34,197,94,0.08)">
+              🔄 Refresh camera data
+            </button>
+            <button id="ghost-cache-clear-btn" class="btn btn-ghost" style="font-size:12px;padding:6px 10px;border:1px solid #333;border-radius:6px;cursor:pointer;background:rgba(239,68,68,0.08);color:#ef4444">
+              🗑️ Clear all cached data
+            </button>
+          </div>
+
+          <!-- Download progress bar -->
+          <div id="ghost-download-bar" style="display:none">
+            <div id="ghost-download-label" style="font-size:11px;color:#8b949e;margin-bottom:4px">Downloading…</div>
+            <div style="background:#0d1117;border:1px solid #30363d;border-radius:4px;height:16px;overflow:hidden">
+              <div id="ghost-download-progress" style="background:#22c55e;height:100%;width:0%;font-size:10px;font-family:monospace;color:#000;display:flex;align-items:center;justify-content:center;transition:width 0.2s">0%</div>
+            </div>
+          </div>
+
+          <div style="margin-top:8px;font-size:10px;color:#484f58">
+            Tiles + camera data cached for offline navigation. Syncs automatically when back on Wi-Fi.
+          </div>
+        </details>
+
+        <!-- Sync status toast (floating) -->
+        <div id="ghost-sync-status" style="
+          position:fixed;bottom:60px;left:50%;transform:translateX(-50%);
+          background:rgba(0,0,0,0.85);color:#22c55e;padding:8px 16px;
+          border-radius:6px;font-family:monospace;font-size:12px;z-index:9998;
+          pointer-events:none;opacity:0;transition:opacity 0.4s ease;
+          white-space:nowrap;
+        "></div>
+        <!-- ── END GHOST-OFFLINE ────────────────────────────────────────── -->
 
         <!-- Embed on your site -->
         <details id="embed-details" style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border,#30363d)">
