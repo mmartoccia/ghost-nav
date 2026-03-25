@@ -334,6 +334,80 @@ def _update_privacy_status():
     print(f'[Privacy] Tor available: {tor_avail}')
     return tor_avail
 
+def _test_proxy_latency():
+    """
+    Test proxy connectivity by fetching a known lightweight endpoint.
+    Returns dict with proxy_latency_ms, cleartext_latency_ms, proxy_ok, proxy_label.
+    """
+    test_url = 'https://check.torproject.org/api/ip'
+    fallback_url = 'https://httpbin.org/ip'
+    
+    proxy = _get_proxy_handler()
+    
+    # Test through proxy
+    proxy_ok = False
+    proxy_ms = None
+    proxy_ip = None
+    if proxy and _REQUESTS_AVAILABLE:
+        try:
+            import requests as _req
+            t0 = time.time()
+            sess = _req.Session()
+            sess.proxies = proxy
+            resp = sess.get(test_url, timeout=10)
+            proxy_ms = round((time.time() - t0) * 1000)
+            data = resp.json()
+            proxy_ip = data.get('IP') or data.get('origin')
+            proxy_ok = True
+        except Exception as e:
+            proxy_ms = None
+            proxy_ok = False
+            print(f'[Privacy/Test] Proxy test failed: {e}')
+            # Try fallback
+            try:
+                t0 = time.time()
+                sess2 = _req.Session()
+                sess2.proxies = proxy
+                resp2 = sess2.get(fallback_url, timeout=10)
+                proxy_ms = round((time.time() - t0) * 1000)
+                proxy_ip = resp2.json().get('origin', '?')
+                proxy_ok = True
+            except Exception:
+                pass
+    
+    # Test cleartext
+    cleartext_ms = None
+    cleartext_ip = None
+    try:
+        t0 = time.time()
+        req = urllib.request.Request('https://httpbin.org/ip',
+                                     headers={'User-Agent': 'GhostNav/1.0'})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            cleartext_ms = round((time.time() - t0) * 1000)
+            cleartext_ip = json.loads(r.read()).get('origin', '?')
+    except Exception:
+        pass
+    
+    with _proxy_config_lock:
+        cfg = dict(_proxy_config)
+    
+    label = cfg['type'].upper() if cfg['enabled'] else 'CLEARTEXT'
+    
+    # Update cached latency
+    with _proxy_config_lock:
+        _proxy_config['latency_ms'] = proxy_ms
+    
+    return {
+        'proxy_ok': proxy_ok,
+        'proxy_latency_ms': proxy_ms,
+        'proxy_ip': proxy_ip,
+        'cleartext_latency_ms': cleartext_ms,
+        'cleartext_ip': cleartext_ip,
+        'label': label,
+        'socks5h_dns_leak_safe': True,  # We always use socks5h://
+        'requests_socks_available': _REQUESTS_AVAILABLE,
+    }
+
 # ─── Geometry helpers ──────────────────────────────────────────────────────────
 
 def decode_polyline6(encoded):
@@ -1057,6 +1131,41 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
             self._proxy_post('https://overpass-api.de/api/interpreter', body, timeout=30)
             return
 
+        # ── POST /api/privacy-proxy ──────────────────────────────────────────
+        if self.path == '/api/privacy-proxy':
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                self._send_json({'error': 'Invalid JSON'}, 400)
+                return
+
+            with _proxy_config_lock:
+                if 'enabled' in data:
+                    _proxy_config['enabled'] = bool(data['enabled'])
+                if 'type' in data:
+                    t = data['type']
+                    if t not in ('tor', 'socks5', 'http'):
+                        self._send_json({'error': 'type must be tor, socks5, or http'}, 400)
+                        return
+                    _proxy_config['type'] = t
+                if 'host' in data:
+                    _proxy_config['host'] = str(data['host'])
+                if 'port' in data:
+                    _proxy_config['port'] = int(data['port'])
+                cfg = dict(_proxy_config)
+
+            if cfg['enabled']:
+                print(f"[Privacy] Proxy configured: {cfg['type']}://{cfg['host']}:{cfg['port']}")
+                # Also sync into privacy_state so mode-based checks pick it up
+                with _privacy_lock:
+                    _privacy_state['mode_enabled'] = True
+                    _privacy_state['proxy_configured'] = True
+            else:
+                print('[Privacy] Proxy disabled')
+
+            self._send_json({'status': 'ok', 'config': cfg})
+            return
+
         # ── POST /api/report-camera ───────────────────────────────────────────
         if self.path == '/api/report-camera':
             try:
@@ -1243,6 +1352,37 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
                 'last_rotated_at': status.get('last_rotated_at'),
                 'fallback_warning': status.get('fallback_warning', False),
             })
+            return
+
+        # ── GET /api/privacy-proxy ───────────────────────────────────────────
+        if self.path == '/api/privacy-proxy':
+            with _proxy_config_lock:
+                cfg = dict(_proxy_config)
+            with _privacy_lock:
+                state = dict(_privacy_state)
+            # Determine display label for UI badge
+            if cfg['enabled']:
+                label = cfg['type'].upper()
+            elif state.get('tor_available'):
+                label = 'TOR'
+            else:
+                label = 'CLEARTEXT'
+            self._send_json({
+                'enabled': cfg['enabled'],
+                'type': cfg['type'],
+                'host': cfg['host'],
+                'port': cfg['port'],
+                'latency_ms': cfg.get('latency_ms'),
+                'label': label,
+                'tor_available': state.get('tor_available', False),
+                'requests_socks_available': _REQUESTS_AVAILABLE,
+            })
+            return
+
+        # ── GET /api/privacy-proxy/test ──────────────────────────────────────
+        if self.path == '/api/privacy-proxy/test':
+            result = _test_proxy_latency()
+            self._send_json(result)
             return
 
         # ── GET /api/v1/score ─────────────────────────────────────────────────
