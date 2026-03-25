@@ -1731,3 +1731,45 @@ html, body {
   opacity: 0.45;
   filter: grayscale(1);
 }
+
+/* ── GHOST-MULTISTOP: Multi-Stop Privacy Routing ────────────────────────── */
+
+#multistop-toggle-row {
+  margin-top: 8px;
+}
+
+#multistop-panel {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+#multistop-stops-list .stop-badge {
+  line-height: 20px;
+  text-align: center;
+}
+
+#multistop-stops-list input[type="text"]:focus {
+  outline: none;
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15);
+}
+
+#multistop-results .spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+#multistop-fastest-card,
+#multistop-privacy-card {
+  transition: box-shadow 0.2s;
+}
+
+#multistop-fastest-card:hover,
+#multistop-privacy-card:hover {
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
+}

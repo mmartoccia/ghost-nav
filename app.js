@@ -3178,6 +3178,807 @@ document.addEventListener('DOMContentLoaded', () => {
 
 })();
 
+// ─── GHOST-MULTISTOP: Multi-Stop Privacy Routing ──────────────────────────────
+// TSP-style optimization with privacy cost function across multiple waypoints.
+// Brute-force for N≤6 stops, nearest-neighbor heuristic for N>6.
+// Cost = alpha * normalized_distance + beta * cameras_on_leg
+// alpha + beta = 1, controlled by UI slider.
+// ─────────────────────────────────────────────────────────────────────────────
+
+(function() {
+  'use strict';
+
+  // ── State ──────────────────────────────────────────────────────────────────
+
+  let _stops = [];          // Array of { id, name, coords: {lat, lng}, inputEl, dropdownEl }
+  let _multiStopActive = false;
+  let _multiAlpha = 0.5;    // Speed weight (0=all privacy, 1=all speed)
+  let _multiBeta  = 0.5;    // Privacy weight
+  let _fastestOrder = null; // Array of stop indices for fastest route
+  let _privacyOrder = null; // Array of stop indices for privacy route
+  let _multiRouteLayers = []; // Leaflet layers for multi-stop routes
+  let _stopCounter = 0;     // For unique stop IDs
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /** Generate all permutations of an array. */
+  function permutations(arr) {
+    if (arr.length <= 1) return [arr.slice()];
+    const result = [];
+    for (let i = 0; i < arr.length; i++) {
+      const rest = arr.slice(0, i).concat(arr.slice(i + 1));
+      const perms = permutations(rest);
+      for (const perm of perms) {
+        result.push([arr[i], ...perm]);
+      }
+    }
+    return result;
+  }
+
+  /** Nearest-neighbor heuristic TSP starting from index 0. */
+  function nearestNeighborTSP(distMatrix, costMatrix) {
+    const n = distMatrix.length;
+    const visited = new Array(n).fill(false);
+    const order = [0];
+    visited[0] = true;
+
+    for (let step = 1; step < n; step++) {
+      const last = order[order.length - 1];
+      let bestNext = -1;
+      let bestCost = Infinity;
+      for (let j = 0; j < n; j++) {
+        if (!visited[j] && costMatrix[last][j] < bestCost) {
+          bestCost = costMatrix[last][j];
+          bestNext = j;
+        }
+      }
+      if (bestNext === -1) break;
+      visited[bestNext] = true;
+      order.push(bestNext);
+    }
+    return order;
+  }
+
+  /** Haversine distance in meters between two {lat,lng} points. */
+  function haversineM(a, b) {
+    const R = 6371000;
+    const dLat = (b.lat - a.lat) * Math.PI / 180;
+    const dLng = (b.lng - a.lng) * Math.PI / 180;
+    const sinLat = Math.sin(dLat / 2);
+    const sinLng = Math.sin(dLng / 2);
+    const c = sinLat * sinLat + Math.cos(a.lat * Math.PI / 180) *
+              Math.cos(b.lat * Math.PI / 180) * sinLng * sinLng;
+    return R * 2 * Math.atan2(Math.sqrt(c), Math.sqrt(1 - c));
+  }
+
+  /** Fetch an OSRM route between two coord pairs. Returns {distance, duration, coords}. */
+  async function fetchLegRoute(from, to) {
+    const url = `${OSRM_BASE}/${from.lng.toFixed(6)},${from.lat.toFixed(6)};${to.lng.toFixed(6)},${to.lat.toFixed(6)}?overview=full&geometries=geojson`;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`OSRM ${resp.status}`);
+      const data = await resp.json();
+      if (data.code !== 'Ok' || !data.routes?.length) throw new Error('No route');
+      const route = data.routes[0];
+      return {
+        distance: route.distance,
+        duration: route.duration,
+        coords:   route.geometry.coordinates, // [lng,lat] pairs
+        geometry: route.geometry,
+      };
+    } catch (err) {
+      console.warn('[MultiStop] OSRM leg failed:', err);
+      // Fallback: straight line estimate
+      const d = haversineM(from, to);
+      return {
+        distance: d,
+        duration: d / 13.9, // ~50 km/h
+        coords:   [[from.lng, from.lat], [to.lng, to.lat]],
+        geometry: { type: 'LineString', coordinates: [[from.lng, from.lat], [to.lng, to.lat]] },
+      };
+    }
+  }
+
+  /** Count cameras on a leg (using existing isCameraOnRoute). */
+  function countCamerasOnLeg(coords) {
+    if (typeof countCamerasNearRoute === 'function') {
+      return countCamerasNearRoute(coords);
+    }
+    return 0;
+  }
+
+  /** Build distance and cost matrices for a set of stops. */
+  async function buildMatrices(stopList) {
+    const n = stopList.length;
+    const distMatrix  = [];
+    const camMatrix   = [];
+
+    // Build matrices — fetch all legs in parallel rows
+    for (let i = 0; i < n; i++) {
+      distMatrix[i] = [];
+      camMatrix[i]  = [];
+      const rowPromises = [];
+      for (let j = 0; j < n; j++) {
+        if (i === j) {
+          rowPromises.push(Promise.resolve({ distance: 0, duration: 0, coords: [], cameras: 0 }));
+        } else {
+          rowPromises.push(
+            fetchLegRoute(stopList[i].coords, stopList[j].coords).then(leg => ({
+              ...leg,
+              cameras: countCamerasOnLeg(leg.coords),
+            }))
+          );
+        }
+      }
+      const row = await Promise.all(rowPromises);
+      for (let j = 0; j < n; j++) {
+        distMatrix[i][j] = row[j].distance || 0;
+        camMatrix[i][j]  = row[j].cameras  || 0;
+      }
+    }
+
+    return { distMatrix, camMatrix };
+  }
+
+  /** Compute total cost for a given ordering. */
+  function orderCost(order, distMatrix, camMatrix, alpha, beta, maxDist, maxCam) {
+    let totalCost = 0;
+    let totalDist = 0;
+    let totalCams = 0;
+    for (let i = 0; i < order.length - 1; i++) {
+      const a = order[i];
+      const b = order[i + 1];
+      totalDist += distMatrix[a][b];
+      totalCams += camMatrix[a][b];
+    }
+    // Normalize if possible
+    const normDist = maxDist > 0 ? totalDist / maxDist : 0;
+    const normCam  = maxCam  > 0 ? totalCams / maxCam  : 0;
+    totalCost = alpha * normDist + beta * normCam;
+    return { cost: totalCost, totalDist, totalCams };
+  }
+
+  /**
+   * TSP optimization.
+   * For N≤6 waypoints: brute force all permutations.
+   * For N>6: nearest-neighbor heuristic (fast, good enough).
+   *
+   * The start point (index 0) is always fixed at position 0.
+   * We optimize the ordering of intermediate stops (indices 1..n-2)
+   * keeping start fixed. End destination (index n-1) is also fixed.
+   */
+  async function optimizeOrder(stopList, alpha, beta) {
+    const n = stopList.length;
+
+    if (n < 2) return { fastest: [0], privacy: [0], legs: {} };
+
+    // Build matrices
+    showMultiStopLoading('Building route matrix…');
+    const { distMatrix, camMatrix } = await buildMatrices(stopList);
+
+    // Find normalization factors
+    let maxDist = 0, maxCam = 0;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (distMatrix[i][j] > maxDist) maxDist = distMatrix[i][j];
+        if (camMatrix[i][j] > maxCam)   maxCam  = camMatrix[i][j];
+      }
+    }
+
+    const middleIndices = [];
+    for (let i = 1; i < n - 1; i++) middleIndices.push(i);
+
+    let fastestOrder = null;
+    let fastestCost  = Infinity;
+    let privacyOrder = null;
+    let privacyCost  = Infinity;
+
+    if (middleIndices.length === 0) {
+      // Only 2 stops (start→end), no reordering possible
+      fastestOrder = [0, n - 1];
+      privacyOrder = [0, n - 1];
+    } else if (middleIndices.length <= 5) {
+      // Brute force permutations of middle stops (≤5 midpoints → ≤120 permutations)
+      showMultiStopLoading(`Evaluating ${Math.min(720, permutations(middleIndices).length)} permutations…`);
+      const perms = permutations(middleIndices);
+      for (const perm of perms) {
+        const order = [0, ...perm, n - 1];
+        const { cost: spCost, totalDist } = orderCost(order, distMatrix, camMatrix, 1, 0, maxDist, maxCam);
+        const { cost: prCost } = orderCost(order, distMatrix, camMatrix, alpha, beta, maxDist, maxCam);
+
+        if (spCost < fastestCost) { fastestCost = spCost; fastestOrder = order.slice(); }
+        if (prCost < privacyCost) { privacyCost = prCost; privacyOrder = order.slice(); }
+      }
+    } else {
+      // Heuristic for N>6 waypoints
+      showMultiStopLoading('Running heuristic optimization…');
+
+      // Speed cost matrix: pure distance
+      const speedCostMatrix = distMatrix.map((row, i) =>
+        row.map((d, j) => (i === j ? Infinity : d / (maxDist || 1)))
+      );
+      // Privacy cost matrix: alpha*dist + beta*cams
+      const privCostMatrix = distMatrix.map((row, i) =>
+        row.map((d, j) => {
+          if (i === j) return Infinity;
+          return alpha * (d / (maxDist || 1)) + beta * (camMatrix[i][j] / (maxCam || 1));
+        })
+      );
+
+      const speedNN = nearestNeighborTSP(distMatrix, speedCostMatrix);
+      const privNN  = nearestNeighborTSP(distMatrix, privCostMatrix);
+
+      fastestOrder = speedNN;
+      privacyOrder = privNN;
+    }
+
+    return { fastestOrder, privacyOrder, distMatrix, camMatrix };
+  }
+
+  /**
+   * Fetch detailed leg routes for a given stop ordering.
+   */
+  async function fetchOrderedLegs(stopList, order) {
+    const legs = [];
+    for (let i = 0; i < order.length - 1; i++) {
+      const from = stopList[order[i]];
+      const to   = stopList[order[i + 1]];
+      const leg  = await fetchLegRoute(from.coords, to.coords);
+      legs.push({
+        fromName: from.name || `Stop ${order[i] + 1}`,
+        toName:   to.name   || `Stop ${order[i + 1] + 1}`,
+        distance: leg.distance,
+        duration: leg.duration,
+        coords:   leg.coords,
+        geometry: leg.geometry,
+        cameras:  countCamerasOnLeg(leg.coords),
+      });
+    }
+    return legs;
+  }
+
+  // ── UI helpers ─────────────────────────────────────────────────────────────
+
+  function showMultiStopLoading(msg) {
+    const el = document.getElementById('multistop-results');
+    if (el) {
+      el.style.display = 'block';
+      el.innerHTML = `<div style="font-size:11px;color:#8b949e;text-align:center;padding:12px">
+        <div class="spinner" style="margin:0 auto 8px;width:16px;height:16px"></div>
+        <div>${msg || 'Calculating…'}</div>
+      </div>`;
+    }
+  }
+
+  function fmtDist(m)  { return m >= 1000 ? `${(m/1000).toFixed(1)} km` : `${Math.round(m)} m`; }
+  function fmtTime(s)  { const m = Math.round(s/60); return m < 60 ? `${m} min` : `${Math.floor(m/60)}h ${m%60}m`; }
+
+  function renderLegList(legs, containerId) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!legs || !legs.length) { el.innerHTML = ''; return; }
+
+    const totalDist = legs.reduce((s, l) => s + l.distance, 0);
+    const totalCams = legs.reduce((s, l) => s + l.cameras, 0);
+    const totalTime = legs.reduce((s, l) => s + l.duration, 0);
+
+    el.innerHTML = `
+      <div style="font-size:10px;color:#6b7280;margin-bottom:4px">
+        ${fmtDist(totalDist)} · ${fmtTime(totalTime)} · ${totalCams} camera${totalCams !== 1 ? 's' : ''} total
+      </div>
+      ${legs.map((leg, i) => `
+        <div style="display:flex;align-items:center;gap:4px;font-size:10px;color:#9ca3af;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+          <span style="flex-shrink:0;width:14px;height:14px;border-radius:50%;background:${leg.cameras === 0 ? '#22c55e' : leg.cameras <= 2 ? '#eab308' : '#ef4444'};display:inline-block"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${leg.fromName} → ${leg.toName}</span>
+          <span style="flex-shrink:0;color:${leg.cameras === 0 ? '#22c55e' : leg.cameras <= 2 ? '#eab308' : '#ef4444'};font-weight:600">${leg.cameras} 📷</span>
+          <span style="flex-shrink:0;color:#4b5563">${fmtDist(leg.distance)}</span>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  function renderMultiStopResults(fastestLegs, privacyLegs, fastestOrder, privacyOrder, stops) {
+    const el = document.getElementById('multistop-results');
+    if (!el) return;
+    el.style.display = 'block';
+
+    const fDist = fastestLegs.reduce((s, l) => s + l.distance, 0);
+    const fCams = fastestLegs.reduce((s, l) => s + l.cameras, 0);
+    const fTime = fastestLegs.reduce((s, l) => s + l.duration, 0);
+
+    const pDist = privacyLegs.reduce((s, l) => s + l.distance, 0);
+    const pCams = privacyLegs.reduce((s, l) => s + l.cameras, 0);
+    const pTime = privacyLegs.reduce((s, l) => s + l.duration, 0);
+
+    const camsSaved = Math.max(0, fCams - pCams);
+    const pctSaved  = fCams > 0 ? Math.round(camsSaved / fCams * 100) : 0;
+
+    // Fastest card stats
+    const fStats = document.getElementById('multistop-fastest-stats');
+    if (fStats) fStats.innerHTML = `
+      <span style="color:#9ca3af">${fmtDist(fDist)} · ${fmtTime(fTime)}</span> ·
+      <span style="color:${fCams > 3 ? '#ef4444' : '#eab308'};font-weight:700">${fCams} cameras</span>
+    `;
+
+    // Privacy card stats
+    const pStats = document.getElementById('multistop-privacy-stats');
+    if (pStats) pStats.innerHTML = `
+      <span style="color:#9ca3af">${fmtDist(pDist)} · ${fmtTime(pTime)}</span> ·
+      <span style="color:${pCams === 0 ? '#22c55e' : pCams <= 2 ? '#eab308' : '#ef4444'};font-weight:700">${pCams} cameras</span>
+    `;
+
+    // Savings badge
+    const badge = document.getElementById('multistop-savings-badge');
+    if (badge) {
+      if (camsSaved > 0) {
+        badge.style.display = 'inline-block';
+        badge.textContent = `-${camsSaved} cameras (${pctSaved}% fewer)`;
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    // Reorder suggestion
+    const reorderEl = document.getElementById('multistop-reorder-suggestion');
+    const ordersMatch = JSON.stringify(fastestOrder) === JSON.stringify(privacyOrder);
+    if (reorderEl) {
+      if (!ordersMatch && camsSaved > 0) {
+        const privacyRoute = privacyOrder.map(i => stops[i]?.name || `Stop ${i + 1}`).join(' → ');
+        reorderEl.style.display = 'block';
+        reorderEl.innerHTML = `
+          <div style="font-weight:600;margin-bottom:4px">♻️ Suggested order:</div>
+          <div style="color:#a7f3d0">${privacyRoute}</div>
+          <div style="color:#4ade80;margin-top:4px">Saves ${camsSaved} camera${camsSaved !== 1 ? 's' : ''} (${pctSaved}% reduction)</div>
+        `;
+      } else if (ordersMatch) {
+        reorderEl.style.display = 'block';
+        reorderEl.innerHTML = `<div style="color:#6b7280">✓ Current order is already optimal for privacy.</div>`;
+      } else {
+        reorderEl.style.display = 'none';
+      }
+    }
+
+    // Render leg lists
+    renderLegList(fastestLegs, 'multistop-fastest-legs');
+    renderLegList(privacyLegs, 'multistop-privacy-legs');
+
+    // Restore results container (clear loading state)
+    const resultsEl = document.getElementById('multistop-results');
+    if (resultsEl) {
+      // Re-show the cards that may have been replaced by loader
+      const fastestCard = document.getElementById('multistop-fastest-card');
+      const privacyCard = document.getElementById('multistop-privacy-card');
+      if (fastestCard) fastestCard.style.display = 'block';
+      if (privacyCard) privacyCard.style.display = 'block';
+    }
+  }
+
+  // ── Stop management ────────────────────────────────────────────────────────
+
+  function createStopElement(stopId, stopNum, label) {
+    const div = document.createElement('div');
+    div.id = `multistop-stop-${stopId}`;
+    div.dataset.stopId = stopId;
+    div.style.cssText = 'display:flex;align-items:center;gap:6px;padding:4px 0';
+
+    const badge = document.createElement('span');
+    badge.style.cssText = `flex-shrink:0;width:20px;height:20px;border-radius:50%;background:${label === 'S' ? '#22c55e' : label === 'E' ? '#ef4444' : '#6b7280'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white`;
+    badge.textContent = label;
+    badge.className = 'stop-badge';
+
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'flex:1;position:relative';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = label === 'S' ? 'Start location…' : label === 'E' ? 'Final destination…' : `Waypoint ${stopNum}…`;
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.style.cssText = 'width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;color:#e5e5e5;padding:5px 8px;border-radius:4px;font-size:11px;font-family:monospace';
+    input.id = `multistop-input-${stopId}`;
+
+    const dropdown = document.createElement('div');
+    dropdown.id = `multistop-dropdown-${stopId}`;
+    dropdown.className = 'search-dropdown hidden';
+    dropdown.style.cssText = 'position:absolute;top:100%;left:0;right:0;z-index:2000;background:#0d1117;border:1px solid #30363d;border-radius:4px;max-height:160px;overflow-y:auto';
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(dropdown);
+
+    div.appendChild(badge);
+    div.appendChild(wrapper);
+
+    // Add drag handles and remove buttons for middle stops
+    if (label !== 'S' && label !== 'E') {
+      const upBtn = document.createElement('button');
+      upBtn.textContent = '↑';
+      upBtn.title = 'Move up';
+      upBtn.style.cssText = 'background:none;border:1px solid #374151;color:#6b7280;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:10px';
+      upBtn.onclick = () => moveStop(stopId, -1);
+
+      const downBtn = document.createElement('button');
+      downBtn.textContent = '↓';
+      downBtn.title = 'Move down';
+      downBtn.style.cssText = 'background:none;border:1px solid #374151;color:#6b7280;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:10px';
+      downBtn.onclick = () => moveStop(stopId, 1);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '✕';
+      removeBtn.title = 'Remove stop';
+      removeBtn.style.cssText = 'background:none;border:1px solid #374151;color:#ef4444;padding:2px 5px;border-radius:3px;cursor:pointer;font-size:10px';
+      removeBtn.onclick = () => removeStop(stopId);
+
+      div.appendChild(upBtn);
+      div.appendChild(downBtn);
+      div.appendChild(removeBtn);
+    }
+
+    return { el: div, input, dropdown };
+  }
+
+  function rebuildStopsList() {
+    const container = document.getElementById('multistop-stops-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const countEl = document.getElementById('multistop-count');
+    if (countEl) countEl.textContent = Math.max(0, _stops.length - 2);
+
+    _stops.forEach((stop, i) => {
+      const label = i === 0 ? 'S' : (i === _stops.length - 1 ? 'E' : String(i));
+      container.appendChild(stop.el);
+    });
+  }
+
+  function addStop(afterIndex) {
+    if (_stops.length >= 9) { // max 8 stops (2 fixed + 6 middle)
+      showToast('Maximum 8 stops reached');
+      return;
+    }
+
+    const id = ++_stopCounter;
+    const num = _stops.length - 1; // Before end stop
+    const { el, input, dropdown } = createStopElement(id, num, String(num));
+
+    const stop = { id, name: '', coords: null, el, input, dropdown };
+
+    // Insert before the last stop (end destination)
+    _stops.splice(_stops.length - 1, 0, stop);
+
+    // Setup geocoding for this input
+    setupMultiStopInput(stop);
+    rebuildStopsList();
+    input.focus();
+  }
+
+  function removeStop(stopId) {
+    const idx = _stops.findIndex(s => s.id === stopId);
+    if (idx < 0 || idx === 0 || idx === _stops.length - 1) return; // Can't remove start/end
+    _stops.splice(idx, 1);
+    rebuildStopsList();
+  }
+
+  function moveStop(stopId, direction) {
+    const idx = _stops.findIndex(s => s.id === stopId);
+    if (idx < 0) return;
+    const newIdx = idx + direction;
+    if (newIdx <= 0 || newIdx >= _stops.length - 1) return; // Protect start/end
+
+    const tmp = _stops[idx];
+    _stops[idx] = _stops[newIdx];
+    _stops[newIdx] = tmp;
+    rebuildStopsList();
+  }
+
+  function setupMultiStopInput(stop) {
+    const { input, dropdown } = stop;
+    let timer = null;
+    let currentResults = [];
+    let focusedIdx = -1;
+
+    function renderDropdown(items) {
+      dropdown.innerHTML = '';
+      focusedIdx = -1;
+      if (!items.length) { dropdown.classList.add('hidden'); return; }
+      items.forEach((item, i) => {
+        const div = document.createElement('div');
+        div.className = 'search-item';
+        div.style.cssText = 'padding:8px 10px;cursor:pointer;border-bottom:1px solid #1a2030;font-size:11px';
+        div.innerHTML = `<div style="font-weight:600;color:#e5e5e5">${item.name}</div><div style="color:#6b7280;font-size:10px">${item.address}</div>`;
+        div.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          selectItem(item);
+        });
+        dropdown.appendChild(div);
+      });
+      dropdown.classList.remove('hidden');
+    }
+
+    function selectItem(item) {
+      input.value = item.name + (item.address ? `, ${item.address.split(',')[0]}` : '');
+      stop.name   = input.value;
+      stop.coords = { lat: item.lat, lng: item.lng };
+      dropdown.classList.add('hidden');
+      dropdown.innerHTML = '';
+      input.style.borderColor = '#22c55e';
+    }
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim();
+      input.style.borderColor = '#30363d';
+      stop.coords = null;
+      if (!q || q.length < 2) { dropdown.classList.add('hidden'); return; }
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const results = await geocodeSearch(q);
+        currentResults = results.map(r => formatNominatimResult(r));
+        renderDropdown(currentResults);
+      }, 300);
+    });
+
+    input.addEventListener('blur', () => {
+      setTimeout(() => dropdown.classList.add('hidden'), 200);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      const items = dropdown.querySelectorAll('.search-item');
+      if (e.key === 'ArrowDown') {
+        focusedIdx = Math.min(focusedIdx + 1, items.length - 1);
+        items.forEach((el, i) => el.style.background = i === focusedIdx ? '#1a2030' : '');
+        e.preventDefault();
+      } else if (e.key === 'ArrowUp') {
+        focusedIdx = Math.max(focusedIdx - 1, 0);
+        items.forEach((el, i) => el.style.background = i === focusedIdx ? '#1a2030' : '');
+        e.preventDefault();
+      } else if (e.key === 'Enter' && focusedIdx >= 0 && currentResults[focusedIdx]) {
+        selectItem(currentResults[focusedIdx]);
+        e.preventDefault();
+      } else if (e.key === 'Escape') {
+        dropdown.classList.add('hidden');
+      }
+    });
+  }
+
+  // ── Map drawing ────────────────────────────────────────────────────────────
+
+  function clearMultiRouteLayers() {
+    _multiRouteLayers.forEach(l => {
+      if (map && l) try { map.removeLayer(l); } catch(_) {}
+    });
+    _multiRouteLayers = [];
+  }
+
+  function drawMultiStopRoute(legs, color, weight, opacity, dashArray) {
+    if (!map) return;
+    const layerGroup = L.layerGroup();
+    legs.forEach((leg, i) => {
+      const latlngs = leg.coords.map(([lng, lat]) => [lat, lng]);
+      const line = L.polyline(latlngs, {
+        color, weight: weight || 5, opacity: opacity || 0.8,
+        dashArray: dashArray || null,
+      });
+      line.bindTooltip(
+        `Leg ${i + 1}: ${leg.fromName} → ${leg.toName}<br>${fmtDist(leg.distance)} · ${leg.cameras} cameras`,
+        { sticky: true }
+      );
+      layerGroup.addLayer(line);
+
+      // Add stop markers
+      if (latlngs.length > 0) {
+        const startLl = latlngs[0];
+        const endLl   = latlngs[latlngs.length - 1];
+        const isFirst = i === 0;
+        const isLast  = i === legs.length - 1;
+        if (isFirst) {
+          layerGroup.addLayer(L.circleMarker(startLl, {
+            radius: 8, fillColor: '#22c55e', color: 'white', weight: 2, fillOpacity: 1,
+          }).bindTooltip(leg.fromName));
+        }
+        layerGroup.addLayer(L.circleMarker(endLl, {
+          radius: isLast ? 8 : 6,
+          fillColor: isLast ? '#ef4444' : '#6b7280',
+          color: 'white', weight: 2, fillOpacity: 1,
+        }).bindTooltip(leg.toName));
+      }
+    });
+    layerGroup.addTo(map);
+    _multiRouteLayers.push(layerGroup);
+
+    // Fit map to all route points
+    const allCoords = legs.flatMap(l => l.coords.map(([lng, lat]) => [lat, lng]));
+    if (allCoords.length > 0) {
+      try { map.fitBounds(L.latLngBounds(allCoords), { padding: [40, 40] }); } catch(_) {}
+    }
+
+    return layerGroup;
+  }
+
+  // ── Main flow ──────────────────────────────────────────────────────────────
+
+  async function calculateMultiStop() {
+    // Validate all stops have coordinates
+    const missingIdx = _stops.findIndex(s => !s.coords);
+    if (missingIdx >= 0) {
+      const name = _stops[missingIdx].input?.placeholder || `Stop ${missingIdx + 1}`;
+      showToast(`Please set location for: ${name}`);
+      _stops[missingIdx].input?.focus();
+      return;
+    }
+
+    if (_stops.length < 2) {
+      showToast('Add at least a start and destination');
+      return;
+    }
+
+    showMultiStopLoading('Optimizing route…');
+    clearMultiRouteLayers();
+
+    try {
+      const { fastestOrder, privacyOrder, distMatrix, camMatrix } =
+        await optimizeOrder(_stops, _multiAlpha, _multiBeta);
+
+      _fastestOrder = fastestOrder;
+      _privacyOrder = privacyOrder;
+
+      showMultiStopLoading('Fetching route details…');
+      const [fastestLegs, privacyLegs] = await Promise.all([
+        fetchOrderedLegs(_stops, fastestOrder),
+        fetchOrderedLegs(_stops, privacyOrder),
+      ]);
+
+      renderMultiStopResults(fastestLegs, privacyLegs, fastestOrder, privacyOrder, _stops);
+
+      // Default: show privacy route on map
+      clearMultiRouteLayers();
+      drawMultiStopRoute(privacyLegs, '#22c55e', 6, 0.85);
+
+    } catch (err) {
+      console.error('[MultiStop] Error:', err);
+      const el = document.getElementById('multistop-results');
+      if (el) el.innerHTML = `<div style="color:#ef4444;font-size:11px;padding:8px">Error: ${err.message}</div>`;
+    }
+  }
+
+  async function suggestReorder() {
+    const missingIdx = _stops.findIndex(s => !s.coords);
+    if (missingIdx >= 0) {
+      showToast('Please set all stop locations first');
+      return;
+    }
+    if (_stops.length < 3) {
+      showToast('Add at least one waypoint between start and destination to reorder');
+      return;
+    }
+
+    // Force privacy priority for suggestion
+    await calculateMultiStop();
+  }
+
+  // ── UI initialization ──────────────────────────────────────────────────────
+
+  function initMultiStopUI() {
+    const toggle = document.getElementById('multistop-mode-toggle');
+    if (!toggle) return;
+
+    // Initialize with start + end stops
+    function initStops() {
+      _stops = [];
+      _stopCounter = 0;
+
+      const startId = ++_stopCounter;
+      const endId   = ++_stopCounter;
+
+      const startEl = createStopElement(startId, 0, 'S');
+      const endEl   = createStopElement(endId,   0, 'E');
+
+      const startStop = { id: startId, name: '', coords: null, ...startEl };
+      const endStop   = { id: endId,   name: '', coords: null, ...endEl };
+
+      // Pre-fill from existing startCoords/endCoords if available
+      if (startCoords && document.getElementById('start-input')?.value) {
+        startStop.coords = { ...startCoords };
+        startStop.name   = document.getElementById('start-input').value;
+        startEl.input.value = startStop.name;
+        startEl.input.style.borderColor = '#22c55e';
+      }
+      if (endCoords && document.getElementById('end-input')?.value) {
+        endStop.coords = { ...endCoords };
+        endStop.name   = document.getElementById('end-input').value;
+        endEl.input.value = endStop.name;
+        endEl.input.style.borderColor = '#22c55e';
+      }
+
+      _stops = [startStop, endStop];
+      setupMultiStopInput(startStop);
+      setupMultiStopInput(endStop);
+      rebuildStopsList();
+    }
+
+    toggle.addEventListener('change', (e) => {
+      _multiStopActive = e.target.checked;
+      const panel = document.getElementById('multistop-panel');
+      if (panel) panel.style.display = _multiStopActive ? 'block' : 'none';
+
+      if (_multiStopActive) {
+        initStops();
+      } else {
+        clearMultiRouteLayers();
+      }
+    });
+
+    // Add stop button
+    const addBtn = document.getElementById('multistop-add-btn');
+    if (addBtn) addBtn.addEventListener('click', () => addStop());
+
+    // Calculate route button
+    const routeBtn = document.getElementById('multistop-route-btn');
+    if (routeBtn) routeBtn.addEventListener('click', calculateMultiStop);
+
+    // Suggest reorder button
+    const reorderBtn = document.getElementById('multistop-reorder-btn');
+    if (reorderBtn) reorderBtn.addEventListener('click', suggestReorder);
+
+    // Alpha/Beta slider
+    const slider = document.getElementById('multistop-alpha-slider');
+    const label  = document.getElementById('multistop-priority-label');
+    if (slider) {
+      slider.addEventListener('input', () => {
+        const v = parseInt(slider.value, 10);
+        // v=0 → all privacy (alpha=0, beta=1)
+        // v=50 → balanced (alpha=0.5, beta=0.5)
+        // v=100 → all speed (alpha=1, beta=0)
+        _multiAlpha = v / 100;
+        _multiBeta  = 1 - _multiAlpha;
+        if (label) {
+          if (v < 30)      label.textContent = '🔒 Privacy Priority';
+          else if (v > 70) label.textContent = '⚡ Speed Priority';
+          else             label.textContent = 'Balanced';
+          label.style.color = v < 30 ? '#22c55e' : v > 70 ? '#eab308' : '#22c55e';
+        }
+      });
+    }
+
+    // Show fastest / Show privacy buttons
+    document.addEventListener('click', async (e) => {
+      if (e.target.id === 'multistop-show-fastest' && _fastestOrder) {
+        clearMultiRouteLayers();
+        showMultiStopLoading('Loading fastest route…');
+        const legs = await fetchOrderedLegs(_stops, _fastestOrder);
+        const el = document.getElementById('multistop-results');
+        if (el) el.style.display = 'block'; // restore after loading replaced it
+        drawMultiStopRoute(legs, '#6b7280', 5, 0.7, '8, 5');
+        renderLegList(legs, 'multistop-fastest-legs');
+      }
+      if (e.target.id === 'multistop-show-privacy' && _privacyOrder) {
+        clearMultiRouteLayers();
+        showMultiStopLoading('Loading privacy route…');
+        const legs = await fetchOrderedLegs(_stops, _privacyOrder);
+        const el = document.getElementById('multistop-results');
+        if (el) el.style.display = 'block';
+        drawMultiStopRoute(legs, '#22c55e', 6, 0.85);
+        renderLegList(legs, 'multistop-privacy-legs');
+      }
+    });
+  }
+
+  // Wait for DOM to be ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initMultiStopUI);
+  } else {
+    initMultiStopUI();
+  }
+
+  // Expose for debugging
+  window.GhostMultiStop = {
+    stops:      () => _stops,
+    calculate:  calculateMultiStop,
+    reorder:    suggestReorder,
+    alpha:      () => _multiAlpha,
+    beta:       () => _multiBeta,
+  };
+
+})();
+
 // ─── GhostOfflineManager (GHOST-OFFLINE) ─────────────────────────────────────
 // Handles: offline indicator, cache management, background sync, tile pre-warming
 (function GhostOfflineManager() {
