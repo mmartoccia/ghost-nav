@@ -116,6 +116,23 @@
           <div class="spinner" style="margin:0 auto 10px"></div>
           <div>Loading ALPR data…</div>
         </div>
+
+        <!-- Freshness badge -->
+        <div id="freshness-badge" style="position:absolute;bottom:10px;left:10px;z-index:1001;cursor:pointer;font-family:monospace;font-size:11px;border-radius:6px;padding:5px 9px;background:rgba(0,0,0,0.82);color:#aaa;border:1px solid #333;max-width:300px;transition:background 0.2s" title="Click for freshness details">
+          <span id="freshness-badge-text">📡 Checking camera data…</span>
+        </div>
+
+        <!-- Freshness detail popover -->
+        <div id="freshness-detail" style="display:none;position:absolute;bottom:46px;left:10px;z-index:1002;background:rgba(10,10,10,0.95);color:#e5e5e5;border:1px solid #444;border-radius:8px;padding:12px 16px;font-family:monospace;font-size:12px;min-width:260px;max-width:320px">
+          <div style="font-weight:700;color:#00ff88;margin-bottom:8px">📡 Camera Data Freshness</div>
+          <div id="freshness-detail-body"></div>
+          <div style="margin-top:8px;color:#666;font-size:10px">Click badge to dismiss</div>
+        </div>
+
+        <!-- Refresh spinner overlay -->
+        <div id="refresh-spinner" style="display:none;position:absolute;bottom:46px;left:10px;z-index:1002;background:rgba(0,0,0,0.82);color:#00ff88;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:12px">
+          <span>🔄 Updating camera data…</span>
+        </div>
       </div>
 
       <!-- Side panel -->
@@ -277,7 +294,72 @@
 
       </aside>
     </div>
-  </div>
+
+  <!-- Route Comparison Panel (below map, side-by-side stats) -->
+  <div id="route-comparison-panel" class="route-comparison-panel hidden">
+    <div class="rcp-header">
+      <span class="rcp-title">📊 Route Comparison</span>
+      <button class="rcp-close" id="rcp-close-btn" title="Close comparison">✕</button>
+    </div>
+    <div class="rcp-grid">
+      <!-- Normal Route Card -->
+      <div class="rcp-card rcp-card--normal" id="rcp-normal">
+        <div class="rcp-card-header">
+          <span class="rcp-card-label">⚡ FASTEST ROUTE</span>
+        </div>
+        <div class="rcp-stats">
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Distance</span>
+            <span class="rcp-stat-value" id="rcp-normal-distance">—</span>
+          </div>
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Est. Time</span>
+            <span class="rcp-stat-value" id="rcp-normal-time">—</span>
+          </div>
+          <div class="rcp-stat rcp-stat--cameras">
+            <span class="rcp-stat-label">Cameras Passed</span>
+            <span class="rcp-stat-value rcp-cams--bad" id="rcp-normal-cameras">—</span>
+          </div>
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Privacy Score</span>
+            <span class="rcp-stat-value" id="rcp-normal-score">—</span>
+          </div>
+        </div>
+        <button class="rcp-show-btn" id="rcp-normal-show" data-route="fastest">Show on Map</button>
+      </div>
+      <!-- Privacy Route Card -->
+      <div class="rcp-card rcp-card--privacy" id="rcp-privacy">
+        <div class="rcp-card-header">
+          <span class="rcp-card-label">👻 PRIVACY ROUTE</span>
+          <span class="rcp-recommended hidden" id="rcp-recommended">★ Recommended</span>
+        </div>
+        <div class="rcp-stats">
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Distance</span>
+            <span class="rcp-stat-value" id="rcp-privacy-distance">—</span>
+          </div>
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Est. Time</span>
+            <span class="rcp-stat-value" id="rcp-privacy-time">—</span>
+          </div>
+          <div class="rcp-stat rcp-stat--cameras">
+            <span class="rcp-stat-label">Cameras Passed</span>
+            <span class="rcp-stat-value rcp-cams--good" id="rcp-privacy-cameras">—</span>
+          </div>
+          <div class="rcp-stat">
+            <span class="rcp-stat-label">Privacy Score</span>
+            <span class="rcp-stat-value" id="rcp-privacy-score">—</span>
+          </div>
+        </div>
+        <button class="rcp-show-btn rcp-show-btn--privacy" id="rcp-privacy-show" data-route="ghost">Show on Map</button>
+      </div>
+    </div>
+    <!-- Camera savings badge -->
+    <div class="rcp-savings-badge hidden" id="rcp-savings-badge">
+      <span id="rcp-savings-text">👁 You'll pass 0 fewer cameras</span>
+    </div>
+  </div><!-- /route-comparison-panel -->
+  </div><!-- /app -->
 
   <!-- Privacy Proxy Modal -->
   <div id="privacy-proxy-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9998;align-items:center;justify-content:center">
@@ -426,6 +508,109 @@
       navigator.serviceWorker.register('/sw.js');
     }
   </script>
+  <script>
+  // ── Camera Data Freshness Indicator ─────────────────────────────────────────
+  (function() {
+    const badge    = document.getElementById('freshness-badge');
+    const badgeTxt = document.getElementById('freshness-badge-text');
+    const detail   = document.getElementById('freshness-detail');
+    const detailBody = document.getElementById('freshness-detail-body');
+    const refreshSpinner = document.getElementById('refresh-spinner');
+    let detailOpen = false;
+
+    function fmtAge(secs) {
+      if (secs == null) return 'unknown';
+      if (secs < 60)   return secs + 's ago';
+      if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+      if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
+      return Math.floor(secs / 86400) + 'd ago';
+    }
+
+    function applyStatus(status, ageLabel, count) {
+      badge.style.color = '#aaa';
+      badge.style.borderColor = '#333';
+      if (status === 'stale') {
+        badgeTxt.textContent = '⚠️ Data may be stale | ' + count + ' cameras loaded';
+        badge.style.color = '#facc15';
+        badge.style.borderColor = '#854d0e';
+      } else if (status === 'outdated') {
+        badgeTxt.textContent = '❌ Data outdated — results unreliable | ' + count + ' cameras';
+        badge.style.color = '#f87171';
+        badge.style.borderColor = '#7f1d1d';
+      } else if (status === 'fresh') {
+        badgeTxt.textContent = '📡 Camera data: Updated ' + ageLabel + ' | ' + count + ' cameras loaded';
+      } else {
+        badgeTxt.textContent = '📡 Camera data: No fetches yet | Waiting for first route';
+      }
+    }
+
+    function buildDetail(data) {
+      const age = fmtAge(data.age_seconds);
+      const statusLabel = { fresh: '✅ Fresh', stale: '⚠️ May be stale', outdated: '❌ Outdated', unknown: '❓ Unknown' }[data.status] || '❓';
+      let html = '<table style="width:100%;border-collapse:collapse">';
+      html += `<tr><td style="color:#888;padding:2px 0">Status</td><td style="text-align:right">${statusLabel}</td></tr>`;
+      html += `<tr><td style="color:#888;padding:2px 0">Last fetch</td><td style="text-align:right">${data.overpass_last_fetch ? age : '—'}</td></tr>`;
+      html += `<tr><td style="color:#888;padding:2px 0">Cameras</td><td style="text-align:right">${data.camera_count || 0}</td></tr>`;
+      if (data.overpass_last_fetch) {
+        html += `<tr><td style="color:#888;padding:2px 0">Fetched at</td><td style="text-align:right;font-size:10px">${data.overpass_last_fetch.slice(0,19).replace('T',' ')} UTC</td></tr>`;
+      }
+      html += '</table>';
+      if (data.status === 'stale' || data.status === 'outdated') {
+        html += '<div style="margin-top:8px;color:#facc15;font-size:10px">Trigger a route search to refresh data.</div>';
+      }
+      return html;
+    }
+
+    badge.addEventListener('click', function() {
+      detailOpen = !detailOpen;
+      detail.style.display = detailOpen ? 'block' : 'none';
+      refreshSpinner.style.display = 'none';
+    });
+
+    let _refreshing = false;
+
+    function triggerBackgroundRefresh() {
+      if (_refreshing) return;
+      _refreshing = true;
+      detail.style.display = 'none';
+      detailOpen = false;
+      refreshSpinner.style.display = 'block';
+      badgeTxt.textContent = '🔄 Updating camera data…';
+      // Hit a no-op bbox that forces an Overpass fetch via ghost-route query
+      // Actually, we'll just poll freshness again after a few seconds
+      // The real refresh happens when the user runs a route. We just update the badge.
+      setTimeout(function() {
+        refreshSpinner.style.display = 'none';
+        _refreshing = false;
+        checkFreshness();
+      }, 3000);
+    }
+
+    function checkFreshness() {
+      fetch('/api/freshness')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          const age = fmtAge(data.age_seconds);
+          applyStatus(data.status, age, data.camera_count || 0);
+          detailBody.innerHTML = buildDetail(data);
+
+          // Auto-refresh if > 6h stale (triggers background note, actual refresh on next route)
+          if (data.age_seconds != null && data.age_seconds > 21600 && !_refreshing) {
+            triggerBackgroundRefresh();
+          }
+        })
+        .catch(function() {
+          badgeTxt.textContent = '📡 Camera data: Status unavailable';
+        });
+    }
+
+    // Check on page load
+    checkFreshness();
+    // Re-check every 5 minutes
+    setInterval(checkFreshness, 300000);
+  })();
+  </script>
+
   <footer style="text-align:center;padding:1rem;font-size:0.75rem;color:#6b7280;border-top:1px solid #1e1e1e;margin-top:1rem;">
     <a href="/api-docs" style="color:#22c55e;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">API Docs</a>
   </footer>

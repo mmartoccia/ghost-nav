@@ -42,8 +42,9 @@ html, body {
 #app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh; /* dynamic viewport height — collapses mobile browser chrome */
+  min-height: 100vh;
+  min-height: 100dvh; /* dynamic viewport height — collapses mobile browser chrome */
+  overflow-y: auto;
 }
 
 /* ── Top bar ──────────────────────────────────────────── */
@@ -134,7 +135,8 @@ html, body {
 /* ── Main layout ──────────────────────────────────────── */
 #main {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1534,4 +1536,198 @@ html, body {
   background: rgba(249, 115, 22, 0.2);
   color: #f97316;
   border: 1px solid rgba(249, 115, 22, 0.4);
+}
+
+/* ============================================================
+   Route Comparison Panel — GHOST-COMPARE-001
+   ============================================================ */
+
+.route-comparison-panel {
+  background: var(--bg-secondary, #111827);
+  border-top: 1px solid var(--border, #2a3a56);
+  padding: 16px 20px;
+  font-family: monospace;
+  position: relative;
+}
+
+.route-comparison-panel.hidden {
+  display: none;
+}
+
+.rcp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.rcp-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary, #e8eaf0);
+  letter-spacing: 0.03em;
+}
+
+.rcp-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #8892a4);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+.rcp-close:hover { color: #ef4444; }
+
+.rcp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 540px) {
+  .rcp-grid { grid-template-columns: 1fr; }
+}
+
+.rcp-card {
+  background: var(--bg-card, #1a2236);
+  border: 1px solid var(--border, #2a3a56);
+  border-radius: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  position: relative;
+}
+
+.rcp-card--privacy {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.04);
+}
+.rcp-card--privacy:hover,
+.rcp-card--privacy.rcp-active {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.10);
+}
+.rcp-card--normal:hover,
+.rcp-card--normal.rcp-active {
+  border-color: #6b7280;
+  background: rgba(107, 114, 128, 0.10);
+}
+
+.rcp-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rcp-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary, #8892a4);
+  text-transform: uppercase;
+}
+
+.rcp-card--privacy .rcp-card-label { color: #22c55e; }
+.rcp-card--normal .rcp-card-label  { color: #9ca3af; }
+
+.rcp-recommended {
+  font-size: 11px;
+  font-weight: 700;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  border-radius: 12px;
+  padding: 2px 8px;
+}
+.rcp-recommended.hidden { display: none; }
+
+.rcp-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.rcp-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rcp-stat-label {
+  font-size: 10px;
+  color: var(--text-secondary, #8892a4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rcp-stat-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary, #e8eaf0);
+}
+
+.rcp-cams--bad  { color: #ef4444; }
+.rcp-cams--good { color: #22c55e; }
+
+.rcp-stat--cameras .rcp-stat-value {
+  font-size: 18px;
+}
+
+.rcp-show-btn {
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(107, 114, 128, 0.15);
+  border: 1px solid rgba(107, 114, 128, 0.3);
+  border-radius: 6px;
+  color: #d1d5db;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  letter-spacing: 0.03em;
+}
+.rcp-show-btn:hover {
+  background: rgba(107, 114, 128, 0.3);
+}
+
+.rcp-show-btn--privacy {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #22c55e;
+}
+.rcp-show-btn--privacy:hover {
+  background: rgba(34, 197, 94, 0.28);
+  border-color: #22c55e;
+}
+
+/* Camera savings floating badge */
+.rcp-savings-badge {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+}
+.rcp-savings-badge.hidden { display: none; }
+
+.rcp-savings-badge span {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  border-radius: 20px;
+  color: #22c55e;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 18px;
+  letter-spacing: 0.03em;
+}
+
+/* Active route highlight on map — camera markers differentiation */
+.camera-marker--avoided {
+  opacity: 0.45;
+  filter: grayscale(1);
 }

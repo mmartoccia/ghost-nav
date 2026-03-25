@@ -43,6 +43,7 @@ VERSION = '1.0'
 DATA_DIR = os.path.join(DIR, 'data')
 REPORTED_CAMERAS_FILE = os.path.join(DATA_DIR, 'reported_cameras.json')
 REPORTER_STATS_FILE   = os.path.join(DATA_DIR, 'reporter_stats.json')
+FRESHNESS_FILE        = os.path.join(DATA_DIR, 'freshness.json')
 GHOST_ADMIN_KEY = os.environ.get('GHOST_ADMIN_KEY', 'ghost-admin-secret')
 
 # ─── Privacy/VPN/Tor Configuration ────────────────────────────────────────────
@@ -161,6 +162,69 @@ def fetch_confirmed_reported_cameras():
     with _reported_lock:
         cameras_list = _load_reported_cameras()
     return [c for c in cameras_list if c.get('status') == 'confirmed']
+
+# ─── Freshness tracking ───────────────────────────────────────────────────────
+_freshness_lock = threading.Lock()
+
+def _load_freshness():
+    """Load freshness metadata from disk."""
+    if not os.path.exists(FRESHNESS_FILE):
+        return {}
+    try:
+        with open(FRESHNESS_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_freshness(data):
+    """Save freshness metadata to disk."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(FRESHNESS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
+
+def _update_freshness(camera_count, overpass_timestamp=None):
+    """Update freshness.json after an Overpass fetch."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with _freshness_lock:
+        existing = _load_freshness()
+        updated = {
+            'overpass_last_fetch': overpass_timestamp or now_iso,
+            'camera_count': camera_count,
+            'oldest_camera': existing.get('oldest_camera', now_iso),
+            'last_updated': now_iso,
+        }
+        _save_freshness(updated)
+    return updated
+
+def get_freshness():
+    """Return freshness data, computing age fields."""
+    with _freshness_lock:
+        data = _load_freshness()
+    if not data:
+        return {
+            'overpass_last_fetch': None,
+            'camera_count': 0,
+            'oldest_camera': None,
+            'last_updated': None,
+            'age_seconds': None,
+            'status': 'unknown',
+        }
+    last_fetch = data.get('overpass_last_fetch')
+    age_seconds = None
+    status = 'unknown'
+    if last_fetch:
+        try:
+            dt = datetime.fromisoformat(last_fetch.replace('Z', '+00:00'))
+            age_seconds = int((datetime.now(timezone.utc) - dt).total_seconds())
+            if age_seconds < 86400:        # < 24h
+                status = 'fresh'
+            elif age_seconds < 604800:     # < 7 days
+                status = 'stale'
+            else:
+                status = 'outdated'
+        except Exception:
+            pass
+    return {**data, 'age_seconds': age_seconds, 'status': status}
 
 # ─── Camera cache (in-memory, keyed by bbox string) ───────────────────────────
 _camera_cache = {}          # bbox_key → {'cameras': [...], 'ts': float}
@@ -586,10 +650,13 @@ out body;'''
     
     try:
         result = json.loads(data)
-        return [
+        cameras = [
             {'lat': el['lat'], 'lon': el['lon'], 'id': el['id'], 'tags': el.get('tags', {})}
             for el in result.get('elements', [])
         ]
+        # Update freshness metadata
+        _update_freshness(len(cameras))
+        return cameras
     except Exception as e:
         print(f'[Overpass] JSON parse error: {e}')
         return []
@@ -1329,6 +1396,11 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
             except FileNotFoundError:
                 self.send_response(404)
                 self.end_headers()
+            return
+
+        # ── GET /api/freshness ────────────────────────────────────────────────
+        if self.path.split('?')[0] == '/api/freshness':
+            self._send_json(get_freshness())
             return
 
         # ── GET /api/v1/health ────────────────────────────────────────────────

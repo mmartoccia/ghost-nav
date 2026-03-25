@@ -24,8 +24,8 @@ const GHOST_TIME_WARNING  = 2.0;   // warn if ghost route > this × fastest dura
 const AVOIDANCE_DISTANCES = [800, 1500, 2500]; // retry distances for ghost route
 
 const ROUTE_COLORS = {
-  fastest: { color: '#3b82f6', weight: 5, opacity: 0.55 },                             // blue, semi-transparent
-  ghost:   { color: '#22c55e', weight: 7, opacity: 0.9, dashArray: '12, 6' },          // green, dashed, on top
+  fastest: { color: '#6b7280', weight: 4, opacity: 0.65, dashArray: '8, 5' },          // dashed gray (normal route)
+  ghost:   { color: '#22c55e', weight: 7, opacity: 0.92 },                              // solid green, thick (privacy route)
   alt:     { color: '#94a3b8', weight: 4, opacity: 0.4 },
 };
 
@@ -895,6 +895,9 @@ async function processRoutes(routes) {
   // ── Show route comparison overlay ──
   displayRouteComparison(fastest, ghostItem ? ghostItem.route : null);
 
+  // ── Show bottom comparison panel (side-by-side stats) ──
+  renderRouteComparisonPanel(fastestItem, ghostItem);
+
   // ── Auto-select preferred route ──
   const defaultId = (preferGhost && ghostItem) ? 'ghost' : 'fastest';
   activateRoute(defaultId);
@@ -1088,120 +1091,98 @@ async function snapToNearestRoad(lat, lon, originalRouteCoords) {
 }
 
 /**
- * Build a camera-avoiding "Ghost Route" using OSRM waypoints.
+ * Build a camera-avoiding "Ghost Route" using corridor-based privacy routing.
  *
- * Algorithm:
- *  1. Cluster cameras on the fastest route
- *  2. For each cluster, compute perpendicular avoidance waypoint
- *  3. Snap waypoints to nearest road (preferring roads different from original)
- *  4. Sort waypoints by position along original route
- *  5. Request OSRM route through those waypoints
- *  6. Retry with larger avoidance distances if ghost has >= fastest cameras
- *  7. Try opposite perpendicular direction on retry
- *  8. Fall back to best OSRM alternative if no improvement found
+ * Algorithm (GHOST-ROUTE-002 — corridor approach):
+ *  1. Score all OSRM alternatives (already fetched with ?alternatives=3)
+ *     by counting cameras within 50m of the route polyline.
+ *  2. If any alternative has fewer cameras than the fastest route, use the best one.
+ *  3. Apply loop-detection safety:
+ *     - No coordinate appears twice within 50m tolerance
+ *     - Route distance is not >3x the direct start→end distance
+ *     - If either check fails, fall back to fastest route (no ghost).
+ *  4. Never insert intermediate waypoints — rely entirely on OSRM native alternatives.
  */
 async function buildGhostRoute(fastestCoords, onRouteCameras, altRoutes) {
   const fastestCamCount = countCamerasOnCoords(fastestCoords);
 
   try {
-    // 1. Cluster
-    const clusters = clusterCameras(onRouteCameras);
-    console.log('[Ghost] Clusters:', clusters.length, clusters.map(c => c.size));
+    // ── Step 1: Score OSRM alternatives ────────────────────────────────────
+    console.log('[Ghost] Corridor mode: scoring', (altRoutes || []).length, 'OSRM alternatives');
 
-    // Sort clusters by size descending (prioritize dense clusters)
-    clusters.sort((a, b) => b.size - a.size);
+    let bestAlt    = null;
+    let bestCams   = fastestCamCount;
 
-    let bestGhostRoute = null;
-    let bestCamCount = Infinity;
-
-    // Try each avoidance distance, and both perpendicular directions
-    for (let attempt = 0; attempt < AVOIDANCE_DISTANCES.length; attempt++) {
-      const avoidDist = AVOIDANCE_DISTANCES[attempt];
-      for (const invertDir of [false, true]) {
-        // 2. Compute raw avoidance waypoints
-        const rawWaypoints = [];
-        for (const cluster of clusters) {
-          const wp = computePerpendicularWaypoint(cluster, fastestCoords, avoidDist, invertDir);
-          if (wp) rawWaypoints.push(wp);
-          if (rawWaypoints.length >= MAX_GHOST_WAYPOINTS) break;
-        }
-
-        if (rawWaypoints.length === 0) continue;
-
-        // 3. Sort waypoints by segment index
-        rawWaypoints.sort((a, b) => a.segIdx - b.segIdx);
-
-        // 4. Snap each waypoint to nearest road (prefer roads off the original route)
-        const snapped = await Promise.all(
-          rawWaypoints.map(wp => snapToNearestRoad(wp.lat, wp.lon, fastestCoords))
-        );
-
-        console.log(`[Ghost] Attempt ${attempt + 1} (dist=${avoidDist}m, invert=${invertDir}) waypoints:`, snapped);
-
-        // 5. Build OSRM URL
-        const s = startCoords;
-        const e = endCoords;
-        const waypointStr = snapped.map(w => `${w.lon.toFixed(6)},${w.lat.toFixed(6)}`).join(';');
-        const url = `${OSRM_BASE}/${s.lng.toFixed(6)},${s.lat.toFixed(6)};${waypointStr};${e.lng.toFixed(6)},${e.lat.toFixed(6)}?overview=full&geometries=geojson`;
-
-        try {
-          const resp = await fetch(url);
-          if (!resp.ok) continue;
-          const data = await resp.json();
-
-          if (data.code !== 'Ok' || !data.routes?.length) continue;
-
-          const candidate = data.routes[0];
-          const camCount = countCamerasOnCoords(candidate.geometry.coordinates);
-          console.log(`[Ghost] Attempt ${attempt + 1} invert=${invertDir}: ${camCount} cameras (fastest has ${fastestCamCount})`);
-
-          if (camCount < fastestCamCount && camCount < bestCamCount) {
-            bestCamCount = camCount;
-            bestGhostRoute = candidate;
-            console.log('[Ghost] New best ghost route found:', camCount, 'cameras');
-          }
-        } catch (err) {
-          console.warn('[Ghost] Route request failed:', err);
-          continue;
-        }
-
-        // If we found a good route, stop trying
-        if (bestGhostRoute && bestCamCount < fastestCamCount) break;
-      }
-
-      if (bestGhostRoute && bestCamCount < fastestCamCount) break;
-    }
-
-    // If we found a ghost route with fewer cameras, use it
-    if (bestGhostRoute) {
-      return bestGhostRoute;
-    }
-
-    // 8. Fallback: use the best OSRM alternative route (fewest cameras)
-    console.log('[Ghost] No waypoint route improved camera count — trying OSRM alternatives');
     if (altRoutes && altRoutes.length > 0) {
-      let bestAlt = null;
-      let bestAltCams = fastestCamCount;
       for (const alt of altRoutes) {
         const camCount = countCamerasOnCoords(alt.geometry.coordinates);
-        if (camCount < bestAltCams) {
-          bestAltCams = camCount;
-          bestAlt = alt;
+        console.log('[Ghost] Alt route cameras:', camCount, 'vs fastest:', fastestCamCount,
+                    'dist:', Math.round(alt.distance), 'm');
+        if (camCount < bestCams) {
+          bestCams = camCount;
+          bestAlt  = alt;
         }
-      }
-      if (bestAlt) {
-        console.log('[Ghost] Using best OSRM alternative with', bestAltCams, 'cameras');
-        return bestAlt;
       }
     }
 
-    console.log('[Ghost] No improvement found, ghost route skipped');
-    return null;
+    if (!bestAlt) {
+      console.log('[Ghost] No alternative reduces camera count, ghost route skipped');
+      return null;
+    }
+
+    // ── Step 2: Loop-detection safety ──────────────────────────────────────
+    const validated = validateRoute(bestAlt, startCoords, endCoords);
+    if (!validated) {
+      console.warn('[Ghost] Loop detection failed on best alternative — falling back to null');
+      return null;
+    }
+
+    console.log('[Ghost] Corridor ghost route selected:', bestCams, 'cameras',
+                '(saved', (fastestCamCount - bestCams), 'from', fastestCamCount, ')');
+    return bestAlt;
 
   } catch (err) {
     console.warn('[Ghost] Ghost route build failed:', err);
     return null;
   }
+}
+
+/**
+ * Validate a candidate route for loops and excessive detour.
+ *
+ * Checks:
+ *  1. No coordinate appears twice within 50m (loop detection)
+ *  2. Route distance ≤ 3× direct straight-line distance between start and end
+ *
+ * @param {object} route      - OSRM route object with .geometry.coordinates and .distance
+ * @param {object} startCoords - { lat, lng } of start
+ * @param {object} endCoords   - { lat, lng } of end
+ * @returns {boolean} true if route passes validation, false if it should be rejected
+ */
+function validateRoute(route, startCoords, endCoords) {
+  const coords = route.geometry.coordinates; // [lon, lat] pairs
+
+  // Check 1: no repeated coordinates within 50m
+  const LOOP_TOLERANCE_M = 50;
+  for (let i = 0; i < coords.length; i++) {
+    for (let j = i + 2; j < coords.length; j++) {
+      const d = haversine(coords[i][1], coords[i][0], coords[j][1], coords[j][0]);
+      if (d < LOOP_TOLERANCE_M) {
+        console.warn(`[Ghost] Loop detected: coord ${i} and ${j} are ${Math.round(d)}m apart`);
+        return false;
+      }
+    }
+  }
+
+  // Check 2: route distance ≤ 3× straight-line distance
+  const directDist = haversine(startCoords.lat, startCoords.lng, endCoords.lat, endCoords.lng);
+  const MAX_DETOUR_RATIO = 3.0;
+  if (directDist > 0 && route.distance > directDist * MAX_DETOUR_RATIO) {
+    console.warn(`[Ghost] Excessive detour: route ${Math.round(route.distance)}m vs direct ${Math.round(directDist)}m (ratio ${(route.distance / directDist).toFixed(2)}x)`);
+    return false;
+  }
+
+  return true;
 }
 
 /** Count cameras on a coordinate array (internal helper) */
@@ -1328,6 +1309,131 @@ function displayRouteComparison(fastest, ghost) {
   panel.style.display = 'block';
 }
 
+// ─── Route Comparison Panel (GHOST-COMPARE-001) ───────────────────────────────
+
+/**
+ * Render the side-by-side comparison panel below the map.
+ * Shows fastest vs privacy route with stats and "Show on Map" buttons.
+ */
+function renderRouteComparisonPanel(fastestItem, ghostItem) {
+  const panel = document.getElementById('route-comparison-panel');
+  if (!panel) return;
+
+  if (!fastestItem) { panel.classList.add('hidden'); return; }
+
+  // ── Helpers ──
+  function fmtDist(meters) {
+    const mi = meters / 1609.34;
+    return mi >= 1 ? `${mi.toFixed(1)} mi` : `${Math.round(meters)} m`;
+  }
+  function fmtTime(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.round((seconds % 3600) / 60);
+    return h > 0 ? `${h}h ${m}m` : `${m} min`;
+  }
+  function privacyScore(hits) {
+    return Math.max(0, Math.min(100, Math.round(100 - hits * 7)));
+  }
+  function scoreColor(score) {
+    if (score >= 70) return '#22c55e';
+    if (score >= 40) return '#eab308';
+    return '#ef4444';
+  }
+
+  // ── Fastest (normal) card ──
+  const fCams  = fastestItem.cameraHits;
+  const fScore = privacyScore(fCams);
+  document.getElementById('rcp-normal-distance').textContent = fmtDist(fastestItem.distance);
+  document.getElementById('rcp-normal-time').textContent     = fmtTime(fastestItem.duration);
+  document.getElementById('rcp-normal-cameras').textContent  = String(fCams);
+  const fScoreEl = document.getElementById('rcp-normal-score');
+  fScoreEl.textContent = `${fScore}/100`;
+  fScoreEl.style.color = scoreColor(fScore);
+
+  // ── Privacy (ghost) card ──
+  const rcpPrivacyCard = document.getElementById('rcp-privacy');
+  const rcpRecommended = document.getElementById('rcp-recommended');
+  const savingsBadge   = document.getElementById('rcp-savings-badge');
+  const savingsText    = document.getElementById('rcp-savings-text');
+
+  if (ghostItem) {
+    const gCams    = ghostItem.cameraHits;
+    const gScore   = privacyScore(gCams);
+    const distPct  = ((ghostItem.distance / fastestItem.distance - 1) * 100).toFixed(0);
+    const timeExtraMin = Math.round((ghostItem.duration - fastestItem.duration) / 60);
+    const saved    = Math.max(0, fCams - gCams);
+
+    const distLabel = distPct > 0
+      ? `${fmtDist(ghostItem.distance)} <small style="color:#8892a4">(+${distPct}%)</small>`
+      : fmtDist(ghostItem.distance);
+    const timeLabel = timeExtraMin > 0
+      ? `${fmtTime(ghostItem.duration)} <small style="color:#8892a4">(+${timeExtraMin} min)</small>`
+      : fmtTime(ghostItem.duration);
+
+    document.getElementById('rcp-privacy-distance').innerHTML = distLabel;
+    document.getElementById('rcp-privacy-time').innerHTML     = timeLabel;
+    document.getElementById('rcp-privacy-cameras').textContent = String(gCams);
+    const gScoreEl = document.getElementById('rcp-privacy-score');
+    gScoreEl.textContent = `${gScore}/100`;
+    gScoreEl.style.color = scoreColor(gScore);
+
+    // Show recommended badge if ghost is clearly better
+    if (gCams < fCams) {
+      rcpRecommended.classList.remove('hidden');
+    } else {
+      rcpRecommended.classList.add('hidden');
+    }
+
+    // Camera savings badge
+    if (saved > 0) {
+      savingsText.textContent = `👁 You'll pass ${saved} fewer camera${saved !== 1 ? 's' : ''} on the Ghost Route`;
+      savingsBadge.classList.remove('hidden');
+    } else {
+      savingsBadge.classList.add('hidden');
+    }
+  } else {
+    // No ghost route available
+    document.getElementById('rcp-privacy-distance').textContent = '—';
+    document.getElementById('rcp-privacy-time').textContent     = '—';
+    document.getElementById('rcp-privacy-cameras').textContent  = 'N/A';
+    document.getElementById('rcp-privacy-score').textContent    = '—';
+    rcpRecommended.classList.add('hidden');
+    savingsBadge.classList.add('hidden');
+    rcpPrivacyCard.style.opacity = '0.5';
+  }
+
+  // ── Show/Map buttons ──
+  const normalShowBtn  = document.getElementById('rcp-normal-show');
+  const privacyShowBtn = document.getElementById('rcp-privacy-show');
+
+  if (normalShowBtn) {
+    normalShowBtn.onclick = () => {
+      activateRoute('fastest');
+      highlightRcpCard('normal');
+    };
+  }
+  if (privacyShowBtn) {
+    privacyShowBtn.onclick = () => {
+      if (ghostItem) {
+        activateRoute('ghost');
+        highlightRcpCard('privacy');
+      }
+    };
+    privacyShowBtn.disabled = !ghostItem;
+  }
+
+  // ── Close button ──
+  const closeBtn = document.getElementById('rcp-close-btn');
+  if (closeBtn) closeBtn.onclick = () => panel.classList.add('hidden');
+
+  panel.classList.remove('hidden');
+}
+
+function highlightRcpCard(which) {
+  document.getElementById('rcp-normal').classList.toggle('rcp-active', which === 'normal');
+  document.getElementById('rcp-privacy').classList.toggle('rcp-active', which === 'privacy');
+}
+
 // ─── Route drawing ────────────────────────────────────────────────────────────
 
 function drawRouteItem(item) {
@@ -1376,6 +1482,10 @@ function activateRoute(id) {
   document.querySelectorAll('.route-card').forEach(card => {
     card.classList.toggle('active', card.dataset.id === id);
   });
+
+  // Sync comparison panel card highlights
+  if (id === 'fastest') highlightRcpCard('normal');
+  else if (id === 'ghost') highlightRcpCard('privacy');
 }
 
 function clearRouteLayers() {
