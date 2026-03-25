@@ -2750,6 +2750,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// ── GHOST-JURISDICTION: Init jurisdiction layer after map is ready ─────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Wait briefly for the map to initialize (map is created synchronously but
+  // we defer to avoid race conditions with other DOMContentLoaded handlers)
+  setTimeout(() => {
+    if (typeof JurisdictionLayer !== 'undefined' && typeof map !== 'undefined') {
+      JurisdictionLayer.init(map).catch(err =>
+        console.warn('[Ghost] Jurisdiction layer init error:', err)
+      );
+    }
+  }, 500);
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // GHOST-PUSH-ALERTS — Proximity Alert Engine
 // ═══════════════════════════════════════════════════════════════════════════════

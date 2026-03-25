@@ -1,0 +1,475 @@
+{
+  "version": "1.0",
+  "updated": "2026-03-24",
+  "source": "ACLU ALPR Tracker, NCSL, EFF, state statutes",
+  "jurisdictions": [
+    {
+      "id": "AL", "name": "Alabama", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law. Law enforcement agencies operate without restrictions."
+    },
+    {
+      "id": "AK", "name": "Alaska", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "AZ", "name": "Arizona", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR restrictions. Phoenix and Chandler operate extensive ALPR networks."
+    },
+    {
+      "id": "AR", "name": "Arkansas", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "CA", "name": "California", "type": "state",
+      "protection_level": "strong", "retention_days": 60, "warrant_required": true, "ban": false,
+      "statute_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=201520160SB34",
+      "notes": "CA SB 34 (2016): 60-day retention limit, prohibits sharing without warrant. One of the strongest ALPR laws in the US."
+    },
+    {
+      "id": "CO", "name": "Colorado", "type": "state",
+      "protection_level": "moderate", "retention_days": 30, "warrant_required": false, "ban": false,
+      "statute_url": "https://leg.colorado.gov/bills/hb19-1310",
+      "notes": "HB 19-1310: 30-day retention limit for non-hit data. Requires public disclosure of ALPR usage."
+    },
+    {
+      "id": "CT", "name": "Connecticut", "type": "state",
+      "protection_level": "weak", "retention_days": 90, "warrant_required": false, "ban": false,
+      "statute_url": "https://www.cga.ct.gov/2012/act/pa/2012PA-00098-R00HB-05468-PA.htm",
+      "notes": "PA 12-98: 90-day retention for non-hits. Some sharing restrictions."
+    },
+    {
+      "id": "DE", "name": "Delaware", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "FL", "name": "Florida", "type": "state",
+      "protection_level": "weak", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": "http://www.leg.state.fl.us/statutes/index.cfm?App_mode=Display_Statute&URL=0900-0999/0985/Sections/0985.047.html",
+      "notes": "Some juvenile ALPR restrictions. No general retention limits for non-hit data."
+    },
+    {
+      "id": "GA", "name": "Georgia", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law. Atlanta operates extensive ALPR networks."
+    },
+    {
+      "id": "HI", "name": "Hawaii", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "ID", "name": "Idaho", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "IL", "name": "Illinois", "type": "state",
+      "protection_level": "strong", "retention_days": 90, "warrant_required": true, "ban": false,
+      "statute_url": "https://www.ilga.gov/legislation/ilcs/ilcs3.asp?ActID=3860",
+      "notes": "Automated Traffic Law Enforcement System Act (625 ILCS 7/): 90-day retention, warrant required for data access, prohibits use for non-enforcement purposes."
+    },
+    {
+      "id": "IN", "name": "Indiana", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "IA", "name": "Iowa", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "KS", "name": "Kansas", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "KY", "name": "Kentucky", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "LA", "name": "Louisiana", "type": "state",
+      "protection_level": "weak", "retention_days": 60, "warrant_required": false, "ban": false,
+      "statute_url": "https://www.legis.la.gov/legis/Law.aspx?d=1005170",
+      "notes": "RS 44:9.5: 60-day retention limit for some agencies. Limited restrictions."
+    },
+    {
+      "id": "ME", "name": "Maine", "type": "state",
+      "protection_level": "strong", "retention_days": 21, "warrant_required": true, "ban": false,
+      "statute_url": "https://legislature.maine.gov/legis/bills/getPDF.asp?paper=SP0150&item=1&snum=127",
+      "notes": "LD 1561 (2015): 21-day retention limit, strict data sharing restrictions, warrant required for access."
+    },
+    {
+      "id": "MD", "name": "Maryland", "type": "state",
+      "protection_level": "weak", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "Some local restrictions. No comprehensive statewide law."
+    },
+    {
+      "id": "MA", "name": "Massachusetts", "type": "state",
+      "protection_level": "moderate", "retention_days": 14, "warrant_required": false, "ban": false,
+      "statute_url": "https://malegislature.gov/Laws/GeneralLaws/PartIV/TitleI/Chapter272/Section99",
+      "notes": "State police policy limits retention to 14 days. Legislature debating broader law."
+    },
+    {
+      "id": "MI", "name": "Michigan", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law. Detroit operates large ALPR network."
+    },
+    {
+      "id": "MN", "name": "Minnesota", "type": "state",
+      "protection_level": "moderate", "retention_days": 60, "warrant_required": false, "ban": false,
+      "statute_url": "https://www.revisor.mn.gov/statutes/cite/13.824",
+      "notes": "Minn. Stat. 13.824: 60-day retention for non-hit data, data sharing restrictions, audit requirements."
+    },
+    {
+      "id": "MS", "name": "Mississippi", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "MO", "name": "Missouri", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "MT", "name": "Montana", "type": "state",
+      "protection_level": "moderate", "retention_days": null, "warrant_required": true, "ban": false,
+      "statute_url": "https://leg.mt.gov/bills/2023/billpdf/HB0352.pdf",
+      "notes": "HB 352 (2023): Requires warrant to access ALPR data. Strong constitutional protections."
+    },
+    {
+      "id": "NE", "name": "Nebraska", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "NV", "name": "Nevada", "type": "state",
+      "protection_level": "weak", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "NRS 481A: Some reporting requirements. No retention limits."
+    },
+    {
+      "id": "NH", "name": "New Hampshire", "type": "state",
+      "protection_level": "strong", "retention_days": 3, "warrant_required": true, "ban": false,
+      "statute_url": "https://www.gencourt.state.nh.us/rsa/html/XXI/261-A/261-A-mrg.htm",
+      "notes": "RSA 261-A: One of the most restrictive ALPR laws. 3-minute retention for non-hit plates. Cannot store non-criminal matches beyond initial processing."
+    },
+    {
+      "id": "NJ", "name": "New Jersey", "type": "state",
+      "protection_level": "weak", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No comprehensive ALPR law. Some agency-level policies."
+    },
+    {
+      "id": "NM", "name": "New Mexico", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "NY", "name": "New York", "type": "state",
+      "protection_level": "weak", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No comprehensive ALPR law. NYC operates thousands of ALPR cameras."
+    },
+    {
+      "id": "NC", "name": "North Carolina", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "ND", "name": "North Dakota", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "OH", "name": "Ohio", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "OK", "name": "Oklahoma", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "OR", "name": "Oregon", "type": "state",
+      "protection_level": "moderate", "retention_days": null, "warrant_required": true, "ban": false,
+      "statute_url": "https://www.oregonlegislature.gov/bills_laws/ors/ors802.html",
+      "notes": "ORS 802.179: Warrant required for access to ALPR data stored beyond hit. Strict sharing restrictions."
+    },
+    {
+      "id": "PA", "name": "Pennsylvania", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law. Philadelphia operates extensive ALPR network."
+    },
+    {
+      "id": "RI", "name": "Rhode Island", "type": "state",
+      "protection_level": "moderate", "retention_days": 18, "warrant_required": false, "ban": false,
+      "statute_url": "http://webserver.rilin.state.ri.us/Statutes/title12/12-1.3-2.HTM",
+      "notes": "18-month retention cap (statute ambiguous). Legislative debate ongoing."
+    },
+    {
+      "id": "SC", "name": "South Carolina", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "SD", "name": "South Dakota", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "TN", "name": "Tennessee", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "TX", "name": "Texas", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law. Texas DPS operates statewide network."
+    },
+    {
+      "id": "UT", "name": "Utah", "type": "state",
+      "protection_level": "moderate", "retention_days": 30, "warrant_required": false, "ban": false,
+      "statute_url": "https://le.utah.gov/xcode/Title41/Chapter6A/41-6a-2003.html",
+      "notes": "UCA 41-6a-2003: 30-day retention for non-hit data. Some access restrictions."
+    },
+    {
+      "id": "VT", "name": "Vermont", "type": "state",
+      "protection_level": "strong", "retention_days": null, "warrant_required": true, "ban": false,
+      "statute_url": "https://legislature.vermont.gov/statutes/section/23/007/00170",
+      "notes": "23 V.S.A. §170: Strict warrant requirement, prohibits retention of non-hit data. Very strong privacy protections."
+    },
+    {
+      "id": "VA", "name": "Virginia", "type": "state",
+      "protection_level": "moderate", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": "https://law.lis.virginia.gov/vacode/title15.2/chapter22/section15.2-2263/",
+      "notes": "VA Code 15.2-2263: Some restrictions on ALPR use by localities. Pending stricter legislation."
+    },
+    {
+      "id": "WA", "name": "Washington", "type": "state",
+      "protection_level": "moderate", "retention_days": 30, "warrant_required": false, "ban": false,
+      "statute_url": "https://app.leg.wa.gov/rcw/default.aspx?cite=46.08.185",
+      "notes": "RCW 46.08.185: 30-day retention limit, audit requirements, prohibition on non-law enforcement uses."
+    },
+    {
+      "id": "WV", "name": "West Virginia", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "WI", "name": "Wisconsin", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "WY", "name": "Wyoming", "type": "state",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "No statewide ALPR law."
+    },
+    {
+      "id": "city-camden-nj", "name": "Camden, NJ", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "Operates dense ALPR network. No local restrictions."
+    },
+    {
+      "id": "city-chicago-il", "name": "Chicago, IL", "type": "city",
+      "protection_level": "strong", "retention_days": 90, "warrant_required": true, "ban": false,
+      "statute_url": "https://chicagopolicyregister.com/alpr",
+      "notes": "Subject to IL ALPR Act. City additionally restricts fusion center data sharing."
+    },
+    {
+      "id": "city-nyc-ny", "name": "New York City, NY", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "NYPD operates 4,000+ ALPR cameras. No city-level retention limits. Subject to weak state law."
+    },
+    {
+      "id": "city-la-ca", "name": "Los Angeles, CA", "type": "city",
+      "protection_level": "strong", "retention_days": 60, "warrant_required": true, "ban": false,
+      "statute_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=201520160SB34",
+      "notes": "Subject to CA SB 34. LAPD must follow 60-day limit and warrant requirement."
+    },
+    {
+      "id": "city-san-francisco-ca", "name": "San Francisco, CA", "type": "city",
+      "protection_level": "strong", "retention_days": 60, "warrant_required": true, "ban": false,
+      "statute_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=201520160SB34",
+      "notes": "CA SB 34 applies. SFPD has additional surveillance tech oversight ordinance (Prop B 2021)."
+    },
+    {
+      "id": "city-boston-ma", "name": "Boston, MA", "type": "city",
+      "protection_level": "moderate", "retention_days": 14, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "BPD policy: 14-day retention. City council considering stronger ordinance."
+    },
+    {
+      "id": "city-seattle-wa", "name": "Seattle, WA", "type": "city",
+      "protection_level": "moderate", "retention_days": 30, "warrant_required": false, "ban": false,
+      "statute_url": "https://app.leg.wa.gov/rcw/default.aspx?cite=46.08.185",
+      "notes": "Subject to WA state 30-day limit. Seattle IT has additional surveillance transparency ordinance."
+    },
+    {
+      "id": "city-portland-or", "name": "Portland, OR", "type": "city",
+      "protection_level": "moderate", "retention_days": null, "warrant_required": true, "ban": false,
+      "statute_url": "https://www.oregonlegislature.gov/bills_laws/ors/ors802.html",
+      "notes": "Subject to OR warrant requirement. City also has surveillance technology transparency policy."
+    },
+    {
+      "id": "city-denver-co", "name": "Denver, CO", "type": "city",
+      "protection_level": "moderate", "retention_days": 30, "warrant_required": false, "ban": false,
+      "statute_url": "https://leg.colorado.gov/bills/hb19-1310",
+      "notes": "Subject to CO HB 19-1310 (30-day limit). DPD must publish annual ALPR usage reports."
+    },
+    {
+      "id": "city-minneapolis-mn", "name": "Minneapolis, MN", "type": "city",
+      "protection_level": "moderate", "retention_days": 60, "warrant_required": false, "ban": false,
+      "statute_url": "https://www.revisor.mn.gov/statutes/cite/13.824",
+      "notes": "Subject to MN state 60-day limit. Post-2020 reforms added additional MPD data restrictions."
+    },
+    {
+      "id": "city-detroit-mi", "name": "Detroit, MI", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "DPD operates large ALPR network with Project Green Light. No city-level restrictions."
+    },
+    {
+      "id": "city-phoenix-az", "name": "Phoenix, AZ", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "Large ALPR deployment. No city or state restrictions."
+    },
+    {
+      "id": "city-houston-tx", "name": "Houston, TX", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "HPD operates extensive ALPR network. No restrictions at city or state level."
+    },
+    {
+      "id": "city-atlanta-ga", "name": "Atlanta, GA", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "APD operates ALPR with no retention limits or state law restricting use."
+    },
+    {
+      "id": "city-philadelphia-pa", "name": "Philadelphia, PA", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "PPD uses Shotspotter + ALPR. No city or state restrictions."
+    },
+    {
+      "id": "city-miami-fl", "name": "Miami, FL", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "MPD operates ALPR citywide. No meaningful restrictions."
+    },
+    {
+      "id": "city-dallas-tx", "name": "Dallas, TX", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "DPD uses ALPR extensively. No state or local restrictions."
+    },
+    {
+      "id": "city-las-vegas-nv", "name": "Las Vegas, NV", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "LVMPD uses ALPR at high density due to gaming/casino district monitoring."
+    },
+    {
+      "id": "city-richmond-va", "name": "Richmond, VA", "type": "city",
+      "protection_level": "moderate", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": "https://law.lis.virginia.gov/vacode/title15.2/chapter22/section15.2-2263/",
+      "notes": "Subject to VA state law. RPD has local policy limiting non-investigative ALPR queries."
+    },
+    {
+      "id": "city-salt-lake-city-ut", "name": "Salt Lake City, UT", "type": "city",
+      "protection_level": "moderate", "retention_days": 30, "warrant_required": false, "ban": false,
+      "statute_url": "https://le.utah.gov/xcode/Title41/Chapter6A/41-6a-2003.html",
+      "notes": "Subject to UT 30-day retention law. SLCPD publishes annual ALPR usage statistics."
+    },
+    {
+      "id": "city-nashville-tn", "name": "Nashville, TN", "type": "city",
+      "protection_level": "none", "retention_days": null, "warrant_required": false, "ban": false,
+      "statute_url": null,
+      "notes": "MNPD uses ALPR citywide. No restrictions at city or state level."
+    },
+    {
+      "id": "city-portland-me", "name": "Portland, ME", "type": "city",
+      "protection_level": "strong", "retention_days": 21, "warrant_required": true, "ban": false,
+      "statute_url": "https://legislature.maine.gov/legis/bills/getPDF.asp?paper=SP0150&item=1&snum=127",
+      "notes": "Subject to Maine LD 1561. 21-day limit, warrant required."
+    },
+    {
+      "id": "city-manchester-nh", "name": "Manchester, NH", "type": "city",
+      "protection_level": "strong", "retention_days": 3, "warrant_required": true, "ban": false,
+      "statute_url": "https://www.gencourt.state.nh.us/rsa/html/XXI/261-A/261-A-mrg.htm",
+      "notes": "Subject to NH RSA 261-A. 3-minute retention for non-hit plates."
+    },
+    {
+      "id": "city-concord-ca", "name": "Concord, CA", "type": "city",
+      "protection_level": "strong", "retention_days": 60, "warrant_required": true, "ban": false,
+      "statute_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=201520160SB34",
+      "notes": "Subject to CA SB 34. CPD participates in regional ALPR network under state law."
+    },
+    {
+      "id": "county-alameda-ca", "name": "Alameda County, CA", "type": "county",
+      "protection_level": "strong", "retention_days": 60, "warrant_required": true, "ban": false,
+      "statute_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=201520160SB34",
+      "notes": "ACSO subject to CA SB 34. County also has surveillance ordinance requiring board approval for new tech."
+    },
+    {
+      "id": "county-contra-costa-ca", "name": "Contra Costa County, CA", "type": "county",
+      "protection_level": "strong", "retention_days": 60, "warrant_required": true, "ban": false,
+      "statute_url": "https://leginfo.legislature.ca.gov/faces/billNavClient.xhtml?bill_id=201520160SB34",
+      "notes": "Subject to CA SB 34."
+    },
+    {
+      "id": "county-cook-il", "name": "Cook County, IL", "type": "county",
+      "protection_level": "strong", "retention_days": 90, "warrant_required": true, "ban": false,
+      "statute_url": "https://www.ilga.gov/legislation/ilcs/ilcs3.asp?ActID=3860",
+      "notes": "Subject to IL ALPR Act. County operates extensive network covering Chicago suburbs."
+    },
+    {
+      "id": "county-king-wa", "name": "King County, WA", "type": "county",
+      "protection_level": "moderate", "retention_days": 30, "warrant_required": false, "ban": false,
+      "statute_url": "https://app.leg.wa.gov/rcw/default.aspx?cite=46.08.185",
+      "notes": "Subject to WA state 30-day limit. KCSO has additional transparency policies."
+    }
+  ]
+}

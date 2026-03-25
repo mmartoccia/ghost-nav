@@ -1338,6 +1338,105 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({'status': 'ok', 'config': cfg})
             return
 
+        # ── POST /api/route-legal-summary (GHOST-JURISDICTION) ───────────────
+        if self.path == '/api/route-legal-summary':
+            import json as _json, os as _os
+            try:
+                req_data = json.loads(body)
+            except Exception:
+                self._send_json({'error': 'Invalid JSON'}, 400)
+                return
+
+            coords = req_data.get('coordinates', [])  # list of [lat, lng]
+            jdata_path = _os.path.join(DIR, 'data', 'jurisdiction-privacy.json')
+            try:
+                with open(jdata_path, 'r', encoding='utf-8') as _f:
+                    jdata = _json.load(_f)
+            except Exception as _e:
+                self._send_json({'error': f'Could not load jurisdiction data: {_e}'}, 500)
+                return
+
+            # Build a simple lookup: state -> [min_lat, max_lat, min_lon, max_lon]
+            # (approximate bounding boxes for US states)
+            STATE_BBOX = {
+                'AL': [30.2, 35.0, -88.5, -84.9], 'AK': [54.7, 71.5, -168.0, -130.0],
+                'AZ': [31.3, 37.0, -114.8, -109.0], 'AR': [33.0, 36.5, -94.6, -89.6],
+                'CA': [32.5, 42.0, -124.5, -114.1], 'CO': [37.0, 41.0, -109.1, -102.0],
+                'CT': [41.0, 42.1, -73.7, -71.8], 'DE': [38.5, 39.8, -75.8, -75.0],
+                'FL': [24.5, 31.0, -87.6, -80.0], 'GA': [30.4, 35.0, -85.6, -80.8],
+                'HI': [18.9, 22.2, -160.2, -154.8], 'ID': [42.0, 49.0, -117.2, -111.0],
+                'IL': [37.0, 42.5, -91.5, -87.5], 'IN': [37.8, 41.8, -88.1, -84.8],
+                'IA': [40.4, 43.5, -96.6, -90.1], 'KS': [37.0, 40.0, -102.1, -94.6],
+                'KY': [36.5, 39.1, -89.6, -81.9], 'LA': [29.0, 33.0, -94.0, -89.0],
+                'ME': [43.1, 47.5, -71.1, -66.9], 'MD': [37.9, 39.7, -79.5, -75.0],
+                'MA': [41.2, 42.9, -73.5, -69.9], 'MI': [41.7, 48.3, -90.4, -82.4],
+                'MN': [43.5, 49.4, -97.2, -89.5], 'MS': [30.2, 35.0, -91.7, -88.1],
+                'MO': [36.0, 40.6, -95.8, -89.1], 'MT': [44.4, 49.0, -116.1, -104.0],
+                'NE': [40.0, 43.0, -104.1, -95.3], 'NV': [35.0, 42.0, -120.0, -114.0],
+                'NH': [42.7, 45.3, -72.6, -70.7], 'NJ': [38.9, 41.4, -75.6, -73.9],
+                'NM': [31.3, 37.0, -109.1, -103.0], 'NY': [40.5, 45.0, -79.8, -71.9],
+                'NC': [33.8, 36.6, -84.3, -75.5], 'ND': [45.9, 49.0, -104.1, -96.6],
+                'OH': [38.4, 42.3, -84.8, -80.5], 'OK': [33.6, 37.0, -103.0, -94.4],
+                'OR': [42.0, 46.3, -124.6, -116.5], 'PA': [39.7, 42.3, -80.5, -74.7],
+                'RI': [41.1, 42.0, -71.9, -71.1], 'SC': [32.1, 35.2, -83.4, -78.5],
+                'SD': [42.5, 45.9, -104.1, -96.4], 'TN': [35.0, 36.7, -90.3, -81.6],
+                'TX': [25.8, 36.5, -106.6, -93.5], 'UT': [37.0, 42.0, -114.1, -109.0],
+                'VT': [42.7, 45.0, -73.4, -71.5], 'VA': [36.5, 39.5, -83.7, -75.2],
+                'WA': [45.5, 49.0, -124.8, -116.9], 'WV': [37.2, 40.6, -82.6, -77.7],
+                'WI': [42.5, 47.1, -92.9, -86.8], 'WY': [41.0, 45.0, -111.1, -104.1],
+            }
+
+            # Index jurisdictions
+            jindex = {j['id']: j for j in jdata.get('jurisdictions', [])}
+
+            # Find which states the route passes through
+            crossed = set()
+            for coord in coords:
+                try:
+                    lat, lng = float(coord[0]), float(coord[1])
+                except (TypeError, ValueError, IndexError):
+                    continue
+                for state_id, (min_lat, max_lat, min_lon, max_lon) in STATE_BBOX.items():
+                    if min_lat <= lat <= max_lat and min_lon <= lng <= max_lon:
+                        crossed.add(state_id)
+
+            if not crossed:
+                self._send_json({'summary': 'No jurisdiction data available for this route.', 'jurisdictions': []})
+                return
+
+            # Collect and sort jurisdictions (weakest first for warning)
+            order = {'none': 0, 'weak': 1, 'moderate': 2, 'strong': 3}
+            jurisdictions_info = []
+            for jid in crossed:
+                if jid in jindex:
+                    jurisdictions_info.append(jindex[jid])
+            jurisdictions_info.sort(key=lambda x: order.get(x.get('protection_level', 'none'), 0))
+
+            lines = [f'Your route crosses {len(jurisdictions_info)} jurisdiction(s):']
+            for j in jurisdictions_info:
+                lvl  = j.get('protection_level', 'none').upper()
+                ret  = j.get('retention_days')
+                ret_str = f"{ret}d retention" if ret is not None else "no retention limit"
+                warr = ', warrant required' if j.get('warrant_required') else ''
+                lines.append(f"• {j['name']}: {lvl} ({ret_str}{warr})")
+
+            worst = jurisdictions_info[0] if jurisdictions_info else None
+            if worst:
+                if worst.get('protection_level') == 'none':
+                    lines.append(f"\n⚠️ Warning: {worst['name']} has NO ALPR privacy protections.")
+                elif worst.get('protection_level') == 'weak':
+                    lines.append(f"\n⚠️ Note: {worst['name']} has weak ALPR protections.")
+                elif all(j.get('protection_level') == 'strong' for j in jurisdictions_info):
+                    lines.append('\n✅ All jurisdictions on this route have strong ALPR privacy protections.')
+
+            summary_text = '\n'.join(lines)
+            self._send_json({
+                'summary': summary_text,
+                'jurisdictions': [j['id'] for j in jurisdictions_info],
+                'worst_level': worst.get('protection_level') if worst else None,
+            })
+            return
+
         # ── POST /api/report-camera ───────────────────────────────────────────
         if self.path == '/api/report-camera':
             try:
@@ -1514,6 +1613,20 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
                 },
                 'valid_thresholds': [100, 250, 500],
             })
+            return
+
+        # ── GET /api/jurisdiction-data (GHOST-JURISDICTION) ──────────────────
+        if self.path.split('?')[0] == '/api/jurisdiction-data':
+            import json as _json
+            jdata_path = os.path.join(DIR, 'data', 'jurisdiction-privacy.json')
+            try:
+                with open(jdata_path, 'r', encoding='utf-8') as _f:
+                    jdata = _json.load(_f)
+                self._send_json(jdata)
+            except FileNotFoundError:
+                self._send_json({'error': 'jurisdiction-privacy.json not found'}, status=404)
+            except Exception as _e:
+                self._send_json({'error': str(_e)}, status=500)
             return
 
         # ── GET /api/freshness ────────────────────────────────────────────────
