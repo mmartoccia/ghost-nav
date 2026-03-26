@@ -29,7 +29,7 @@ Get privacy-aware routing between two coordinates.
 const result = await ghost.getRoute(
   [40.7128, -74.0060],  // [lat, lon] start
   [40.7580, -73.9855],  // [lat, lon] end
-  'private'             // 'fast' | 'balanced' | 'private' (default: 'private')
+  'ghost'               // 'fastest' | 'ghost' | 'both' (default: 'ghost')
 );
 
 console.log(`Cameras avoided: ${result.cameras_avoided}`);
@@ -122,7 +122,7 @@ Embed the Ghost Nav map UI as an iframe inside a DOM element.
     theme: 'dark',       // 'light' | 'dark' (default: 'light')
     width: '100%',       // CSS width (default: '100%')
     height: '600px',     // CSS height (default: '500px')
-    mode: 'private',     // routing mode (default: 'private')
+    mode: 'ghost',       // routing mode: 'fastest' | 'ghost' | 'both' (default: 'ghost')
   });
 </script>
 ```

@@ -78,6 +78,9 @@ function initMap() {
   // Check privacy status on init
   checkPrivacyStatus();
 
+  // Init camera FOV layer (off by default — wired to toggle button)
+  CameraFOVLayer.init(map);
+
   // Handle map clicks for report mode
   map.on('click', (e) => {
     if (!reportMode) return;
@@ -732,6 +735,9 @@ function processCameras(elements) {
   const num   = document.getElementById('camera-count-num');
   num.textContent = cameras.length;
   badge.classList.toggle('hidden', cameras.length === 0);
+
+  // Update FOV cones with latest camera data
+  CameraFOVLayer.update(cameras);
 }
 
 function parseBearing(val) {
@@ -3934,6 +3940,389 @@ document.addEventListener('DOMContentLoaded', () => {
     alpha:      () => _multiAlpha,
     beta:       () => _multiBeta,
   };
+
+})();
+
+// ─── CameraFOVLayer (ghost-fov-visualization) ────────────────────────────────
+// Renders camera field-of-view cones on a Leaflet SVG overlay.
+// - Hybrid SVG (< 50 cameras) / Canvas-backed approach
+// - Color by camera type; full 360° ring for unknown direction
+// - Hover brightens cone and shows tooltip
+// - Off by default (performance)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CameraFOVLayer = (function() {
+  'use strict';
+
+  // ── Constants ──────────────────────────────────────────────────────────────
+  const FOV_RADIUS_M      = 70;    // meters — cone length on ground
+  const DEFAULT_FOV_DEG   = 60;    // default angle if camera:angle missing
+  const CANVAS_THRESHOLD  = 50;    // switch to canvas path rendering above this count
+
+  // Color map: category → { fill, opacity }
+  const TYPE_COLORS = {
+    anpr:       { fill: '#ff4444', opacity: 0.40 },
+    automatic:  { fill: '#ff4444', opacity: 0.40 },
+    public:     { fill: '#ff8800', opacity: 0.35 },
+    city:       { fill: '#ff8800', opacity: 0.35 },
+    private:    { fill: '#ffcc00', opacity: 0.30 },
+    indoor:     { fill: '#ffcc00', opacity: 0.30 },
+    unknown:    { fill: '#888888', opacity: 0.25 },
+  };
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let _map          = null;
+  let _visible      = false;
+  let _svgLayer     = null;
+  let _svgEl        = null;
+  let _cameras      = [];
+  let _tooltip      = null;
+  let _coneEls      = [];      // rendered <path> elements
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  function colorForCamera(cam) {
+    const tags = cam.tags || {};
+    const survType = (tags['surveillance:type'] || '').toLowerCase();
+    const camType  = (tags['camera:type']        || '').toLowerCase();
+
+    if (survType === 'anpr' || survType === 'alpr' || camType === 'automatic') {
+      return TYPE_COLORS.anpr;
+    }
+    if (survType === 'public' || survType === 'city') {
+      return TYPE_COLORS.public;
+    }
+    if (survType === 'private' || survType === 'indoor') {
+      return TYPE_COLORS.private;
+    }
+    return TYPE_COLORS.unknown;
+  }
+
+  /**
+   * Convert meters to degrees latitude (rough approximation for cone radius).
+   * Used to estimate the pixel radius at a given map zoom.
+   */
+  function metersToPixels(map, lat, meters) {
+    const R       = 6371000;
+    const latRad  = lat * Math.PI / 180;
+    const scale   = map.getZoomScale(map.getZoom(), 0);
+    // Leaflet: at zoom 0, 1° ≈ 111320m ≈ 256px / 360deg
+    // We use latLngToLayerPoint to get two close points and measure distance.
+    const pt1 = map.latLngToLayerPoint([lat, 0]);
+    const pt2 = map.latLngToLayerPoint([lat + (meters / 111320), 0]);
+    return Math.abs(pt2.y - pt1.y);
+  }
+
+  /**
+   * Build an SVG path string for a FOV cone (wedge/arc).
+   * @param {L.Point} pt      - camera position in layer-point coords
+   * @param {number}  bearing - compass bearing 0-360 (0 = north, 90 = east)
+   * @param {number}  angle   - total FOV width in degrees
+   * @param {number}  radius  - cone radius in pixels
+   * @param {boolean} isDome  - if true, draw a full circle ring instead
+   */
+  function buildConePath(pt, bearing, angle, radius, isDome) {
+    const x = pt.x;
+    const y = pt.y;
+
+    if (isDome) {
+      // Full circle (360° dome)
+      return [
+        `M ${x - radius} ${y}`,
+        `A ${radius} ${radius} 0 1 0 ${x + radius} ${y}`,
+        `A ${radius} ${radius} 0 1 0 ${x - radius} ${y}`,
+        'Z',
+      ].join(' ');
+    }
+
+    // Convert bearing (clockwise from north) to SVG angle (clockwise from east, y-flipped)
+    // SVG x-axis = east, y-axis = down
+    // Bearing 0° = north = SVG -90°; bearing 90° = east = SVG 0°
+    const halfAngle  = angle / 2;
+    const startBear  = bearing - halfAngle;
+    const endBear    = bearing + halfAngle;
+
+    // Convert to radians from SVG's east-axis reference (right), y-flips map north
+    function bearToRad(b) {
+      return (b - 90) * Math.PI / 180;
+    }
+
+    const startRad = bearToRad(startBear);
+    const endRad   = bearToRad(endBear);
+
+    const x1 = x + radius * Math.cos(startRad);
+    const y1 = y + radius * Math.sin(startRad);
+    const x2 = x + radius * Math.cos(endRad);
+    const y2 = y + radius * Math.sin(endRad);
+
+    const largeArc = angle > 180 ? 1 : 0;
+
+    return [
+      `M ${x} ${y}`,
+      `L ${x1.toFixed(2)} ${y1.toFixed(2)}`,
+      `A ${radius.toFixed(2)} ${radius.toFixed(2)} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`,
+      'Z',
+    ].join(' ');
+  }
+
+  // ── Tooltip ────────────────────────────────────────────────────────────────
+
+  function createTooltip() {
+    if (_tooltip) return;
+    _tooltip = document.createElement('div');
+    _tooltip.className = 'ghost-fov-tooltip';
+    _tooltip.style.cssText = 'position:fixed;z-index:9000;display:none';
+    document.body.appendChild(_tooltip);
+  }
+
+  function showTooltipForCam(cam, x, y) {
+    if (!_tooltip) return;
+    const tags = cam.tags || {};
+    const dir  = tags['camera:direction'] || tags.direction || '?';
+    const type = tags['camera:type']       || tags['surveillance:type'] || 'Unknown';
+    const op   = tags.operator            || 'Unknown operator';
+    const angle = tags['camera:angle']     || DEFAULT_FOV_DEG + '°(default)';
+
+    _tooltip.innerHTML = [
+      `<b>📷 Camera FOV</b>`,
+      `Type: ${type}`,
+      `Direction: ${dir}°`,
+      `FOV: ${angle}°`,
+      `Operator: ${op}`,
+    ].join('<br>');
+
+    _tooltip.style.display = 'block';
+    _tooltip.style.left    = (x + 14) + 'px';
+    _tooltip.style.top     = (y - 10) + 'px';
+  }
+
+  function hideTooltip() {
+    if (_tooltip) _tooltip.style.display = 'none';
+  }
+
+  // ── Rendering ──────────────────────────────────────────────────────────────
+
+  function clearCones() {
+    _coneEls.forEach(el => el.parentNode && el.parentNode.removeChild(el));
+    _coneEls = [];
+  }
+
+  function renderCones() {
+    if (!_map || !_visible || !_svgEl) return;
+
+    clearCones();
+
+    const useCanvas = _cameras.length > CANVAS_THRESHOLD;
+
+    if (useCanvas) {
+      renderConvasCanvas();
+    } else {
+      renderSVGCones();
+    }
+  }
+
+  /**
+   * SVG path rendering (< 50 cameras).
+   * Creates one <path> per camera in the Leaflet SVG overlay.
+   */
+  function renderSVGCones() {
+    const svgNS  = 'http://www.w3.org/2000/svg';
+    const bounds = _map.getBounds();
+
+    _cameras.forEach(cam => {
+      if (!bounds.contains([cam.lat, cam.lon ?? cam.lng])) return;
+
+      const latlng  = L.latLng(cam.lat, cam.lon ?? cam.lng);
+      const pt      = _map.latLngToLayerPoint(latlng);
+      const radius  = metersToPixels(_map, cam.lat, FOV_RADIUS_M);
+
+      const tags    = cam.tags || {};
+      const dirVal  = tags['camera:direction'] || tags.direction || null;
+      const bearing = parseBearing(dirVal);
+      const isDome  = bearing === null;
+
+      const camType = (tags['camera:type'] || '').toLowerCase();
+      const isDomeCam = camType === 'dome' || camType === 'ptz';
+      const showRing  = isDome || isDomeCam;
+
+      const fovAngle = parseFloat(tags['camera:angle']) || DEFAULT_FOV_DEG;
+      const { fill, opacity } = colorForCamera(cam);
+
+      const pathStr = buildConePath(pt, bearing ?? 0, fovAngle, radius, showRing);
+
+      const path = document.createElementNS(svgNS, 'path');
+      path.setAttribute('d',               pathStr);
+      path.setAttribute('fill',            fill);
+      path.setAttribute('fill-opacity',    String(opacity));
+      path.setAttribute('stroke',          fill);
+      path.setAttribute('stroke-opacity',  '0.6');
+      path.setAttribute('stroke-width',    '1');
+      path.setAttribute('class',           'ghost-fov-cone');
+      path.setAttribute('data-cam-id',     String(cam.id));
+
+      // Hover handlers
+      path.addEventListener('mouseenter', (e) => {
+        path.setAttribute('fill-opacity', String(Math.min(1, opacity + 0.3)));
+        path.setAttribute('stroke-width', '2');
+        showTooltipForCam(cam, e.clientX, e.clientY);
+      });
+      path.addEventListener('mousemove', (e) => {
+        showTooltipForCam(cam, e.clientX, e.clientY);
+      });
+      path.addEventListener('mouseleave', () => {
+        path.setAttribute('fill-opacity', String(opacity));
+        path.setAttribute('stroke-width', '1');
+        hideTooltip();
+      });
+
+      _svgEl.appendChild(path);
+      _coneEls.push(path);
+    });
+  }
+
+  /**
+   * Canvas-backed rendering for dense camera sets (> 50).
+   * Uses a hidden <canvas> composited over the SVG layer.
+   */
+  function renderConvasCanvas() {
+    // Create a canvas sized to the map pane if not yet existing
+    const mapPane = _map.getPanes().overlayPane;
+    let canvas    = document.getElementById('ghost-fov-canvas');
+    const size    = _map.getSize();
+
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.id = 'ghost-fov-canvas';
+      canvas.style.cssText = `
+        position:absolute;top:0;left:0;pointer-events:none;z-index:300;
+      `;
+      mapPane.appendChild(canvas);
+    }
+    canvas.width  = size.x;
+    canvas.height = size.y;
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size.x, size.y);
+
+    const bounds = _map.getBounds();
+
+    _cameras.forEach(cam => {
+      if (!bounds.contains([cam.lat, cam.lon ?? cam.lng])) return;
+
+      const latlng  = L.latLng(cam.lat, cam.lon ?? cam.lng);
+      const pt      = _map.latLngToLayerPoint(latlng);
+      const radius  = metersToPixels(_map, cam.lat, FOV_RADIUS_M);
+
+      const tags    = cam.tags || {};
+      const dirVal  = tags['camera:direction'] || tags.direction || null;
+      const bearing = parseBearing(dirVal);
+
+      const camType  = (tags['camera:type'] || '').toLowerCase();
+      const isDomeCam = camType === 'dome' || camType === 'ptz' || bearing === null;
+
+      const fovAngle = parseFloat(tags['camera:angle']) || DEFAULT_FOV_DEG;
+      const { fill, opacity } = colorForCamera(cam);
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
+      ctx.fillStyle   = fill;
+      ctx.strokeStyle = fill;
+      ctx.lineWidth   = 1;
+      ctx.globalCompositeOperation = 'source-over';
+
+      if (isDomeCam) {
+        // Full ring
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // Wedge
+        const halfAngle = (fovAngle / 2) * Math.PI / 180;
+        // Convert bearing to canvas angle: 0=north, clockwise
+        // Canvas: 0=east, counter-clockwise from east
+        const bearRad  = (bearing - 90) * Math.PI / 180;
+        const startAng = bearRad - halfAngle;
+        const endAng   = bearRad + halfAngle;
+
+        ctx.beginPath();
+        ctx.moveTo(pt.x, pt.y);
+        ctx.arc(pt.x, pt.y, radius, startAng, endAng, false);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+
+    // Store canvas ref for cleanup
+    _coneEls.push({ parentNode: canvas.parentNode, remove: () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }});
+  }
+
+  /**
+   * Reposition SVG/canvas elements when the map moves (pan/zoom).
+   * Leaflet does not auto-reproject SVG children.
+   */
+  function onMapViewChange() {
+    if (!_visible) return;
+
+    // For canvas mode, reposition the canvas element to the map's layer origin
+    const canvas = document.getElementById('ghost-fov-canvas');
+    if (canvas) {
+      const origin = _map.getPixelOrigin();
+      canvas.style.transform = `translate(${-origin.x}px, ${-origin.y}px)`;
+    }
+
+    renderCones();
+  }
+
+  // ── Public API ─────────────────────────────────────────────────────────────
+
+  function init(leafletMap) {
+    _map = leafletMap;
+
+    // Create a Leaflet SVG overlay layer
+    _svgLayer = L.svg({ padding: 0.5 }).addTo(_map);
+    // Access the raw SVG container from Leaflet
+    _svgEl = _svgLayer._container;
+
+    createTooltip();
+
+    // Re-render on view changes
+    _map.on('moveend zoomend', onMapViewChange);
+
+    // Wire up toggle button
+    const btn = document.getElementById('fov-toggle-btn');
+    if (btn) {
+      btn.addEventListener('click', toggle);
+    }
+  }
+
+  function update(cameraList) {
+    _cameras = cameraList || [];
+    if (_visible) renderCones();
+  }
+
+  function toggle() {
+    _visible = !_visible;
+    const btn = document.getElementById('fov-toggle-btn');
+    if (btn) btn.classList.toggle('active', _visible);
+
+    if (_visible) {
+      renderCones();
+      if (map) showToast('👁 FOV cones enabled', 2000);
+    } else {
+      clearCones();
+      // Remove canvas if in canvas mode
+      const canvas = document.getElementById('ghost-fov-canvas');
+      if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+      hideTooltip();
+    }
+  }
+
+  function isVisible() { return _visible; }
+
+  return { init, update, toggle, isVisible };
 
 })();
 

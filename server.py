@@ -6,6 +6,7 @@ import urllib.parse
 import json
 import os
 import math
+import secrets
 import time
 import threading
 import uuid
@@ -44,7 +45,9 @@ DATA_DIR = os.path.join(DIR, 'data')
 REPORTED_CAMERAS_FILE = os.path.join(DATA_DIR, 'reported_cameras.json')
 REPORTER_STATS_FILE   = os.path.join(DATA_DIR, 'reporter_stats.json')
 FRESHNESS_FILE        = os.path.join(DATA_DIR, 'freshness.json')
-GHOST_ADMIN_KEY = os.environ.get('GHOST_ADMIN_KEY', 'ghost-admin-secret')
+GHOST_ADMIN_KEY = os.environ.get('GHOST_ADMIN_KEY') or secrets.token_hex(32)
+if not os.environ.get('GHOST_ADMIN_KEY'):
+    print('[WARNING] GHOST_ADMIN_KEY not set — generated ephemeral key. Set env var for persistence.')
 
 # ─── Privacy/VPN/Tor Configuration ────────────────────────────────────────────
 PRIVACY_MODE_ENABLED = False  # User opt-in, not default
@@ -667,6 +670,7 @@ out body;'''
 CAMERA_PROXIMITY_M = 25   # Camera "on route" threshold — tuned via GHOST-RESEARCH-005 (was 30, optimal=25)
 MAX_ROUTE_RATIO = 2.0      # Ghost must be < 2x fastest distance
 CLUSTER_RADIUS_M = 400     # Cameras within this distance share a cluster
+MAX_GHOST_WAYPOINTS = 5    # Cap injected corridor waypoints to keep OSRM stable
 
 
 def cluster_cameras(camera_list):
@@ -704,23 +708,120 @@ def offset_point(lat, lon, bearing_deg, dist_m):
     return math.degrees(lat2), math.degrees(lon2)
 
 
+def build_route_chainages(route_coords):
+    """Return cumulative distance at each coordinate index in meters."""
+    if not route_coords:
+        return []
+    chainages = [0.0]
+    for i in range(1, len(route_coords)):
+        lon1, lat1 = route_coords[i - 1]
+        lon2, lat2 = route_coords[i]
+        chainages.append(chainages[-1] + haversine(lat1, lon1, lat2, lon2))
+    return chainages
+
+
+def project_point_to_route(route_coords, cam_lat, cam_lon, chainages=None):
+    """Project a point onto a route polyline and return chainage metadata."""
+    if not route_coords:
+        return None
+    if chainages is None:
+        chainages = build_route_chainages(route_coords)
+    min_d = float('inf')
+    best = None
+    for i in range(len(route_coords) - 1):
+        lon1, lat1 = route_coords[i]
+        lon2, lat2 = route_coords[i + 1]
+        lat_scale = 111320.0
+        lon_scale = 111320.0 * math.cos(math.radians((lat1 + lat2) / 2))
+        ax = lon1 * lon_scale
+        ay = lat1 * lat_scale
+        bx = lon2 * lon_scale
+        by = lat2 * lat_scale
+        px = cam_lon * lon_scale
+        py = cam_lat * lat_scale
+        dx = bx - ax
+        dy = by - ay
+        seg_len_sq = dx * dx + dy * dy
+        if seg_len_sq == 0:
+            t = 0.0
+            proj_x, proj_y = ax, ay
+        else:
+            t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg_len_sq))
+            proj_x = ax + t * dx
+            proj_y = ay + t * dy
+        dist = math.hypot(px - proj_x, py - proj_y)
+        if dist < min_d:
+            seg_len = math.hypot(dx, dy)
+            proj_lon = proj_x / lon_scale if lon_scale else lon1
+            proj_lat = proj_y / lat_scale
+            best = {
+                'distance': dist,
+                'seg_idx': i,
+                't': t,
+                'point': [proj_lon, proj_lat],
+                'chainage': chainages[i] + seg_len * t,
+            }
+            min_d = dist
+    return best
+
+
+def point_at_chainage(route_coords, chainages, target_m):
+    """Interpolate a point on the route at the requested chainage."""
+    if not route_coords:
+        return None
+    if not chainages:
+        chainages = build_route_chainages(route_coords)
+    if target_m <= 0:
+        lon, lat = route_coords[0]
+        return [lon, lat]
+    total = chainages[-1]
+    if target_m >= total:
+        lon, lat = route_coords[-1]
+        return [lon, lat]
+    for i in range(len(route_coords) - 1):
+        start_m = chainages[i]
+        end_m = chainages[i + 1]
+        if start_m <= target_m <= end_m:
+            span = end_m - start_m
+            t = 0.0 if span <= 0 else (target_m - start_m) / span
+            lon1, lat1 = route_coords[i]
+            lon2, lat2 = route_coords[i + 1]
+            return [lon1 + (lon2 - lon1) * t, lat1 + (lat2 - lat1) * t]
+    lon, lat = route_coords[-1]
+    return [lon, lat]
+
+
+def osrm_route_request(waypoints, alternatives=0, approaches=None):
+    """Call OSRM /route with optional alternatives and approaches parameters."""
+    coord_str = ';'.join(f'{lon:.6f},{lat:.6f}' for lon, lat in waypoints)
+    alt_value = 'false' if not alternatives else str(alternatives)
+    params = {
+        'overview': 'full',
+        'geometries': 'polyline6',
+        'alternatives': alt_value,
+    }
+    if approaches:
+        params['approaches'] = approaches
+    url = f'{OSRM_BASE}/route/v1/driving/{coord_str}?{urllib.parse.urlencode(params)}'
+    data, status, error = _fetch_with_proxy(url, timeout=20, method='GET', headers={'User-Agent': 'GhostNav/1.0'})
+    if error:
+        print(f'[OSRM] Route error: {error}')
+        return []
+    try:
+        result = json.loads(data)
+        if result.get('code') == 'Ok' and result.get('routes'):
+            return result['routes']
+    except Exception as e:
+        print(f'[OSRM] Route JSON parse error: {e}')
+    return []
+
+
 def osrm_route_with_alts(waypoints, alternatives=3):
     """
     Call OSRM requesting multiple alternative routes.
     Returns list of route dicts (fastest first), or [single] on failure.
     """
-    coord_str = ';'.join(f'{lon:.6f},{lat:.6f}' for lon, lat in waypoints)
-    url = (f'{OSRM_BASE}/route/v1/driving/{coord_str}'
-           f'?overview=full&geometries=polyline6&alternatives={alternatives}')
-    req = urllib.request.Request(url, headers={'User-Agent': 'GhostNav/1.0'})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read())
-            if data.get('code') == 'Ok' and data.get('routes'):
-                return data['routes']
-    except Exception as e:
-        print(f'[OSRM] Alts error: {e}')
-    return []
+    return osrm_route_request(waypoints, alternatives=alternatives)
 
 
 def count_cameras_on_route(route_coords, cameras):
@@ -731,6 +832,7 @@ def count_cameras_on_route(route_coords, cameras):
 
 def build_bypass_waypoints(cluster, route_coords, offset_m=600):
     """
+    Legacy geometric fallback retained for last-resort debugging.
     For a camera cluster, generate bypass waypoints:
     - Find the closest point on the route to the cluster centroid
     - Place waypoints 400m before + after that point, offset 600m perpendicularly
@@ -797,14 +899,102 @@ def build_bypass_waypoints(cluster, route_coords, offset_m=600):
     ]
 
 
+def snap_to_nearest_road(lat, lon, reference_route_coords=None, cluster_center=None):
+    """
+    Snap a point to a nearby road using OSRM /nearest.
+    If multiple candidates exist, prefer one farther from the reference route window
+    and farther from the cluster center to encourage a real corridor detour.
+    """
+    url = f'{OSRM_BASE}/nearest/v1/driving/{lon:.6f},{lat:.6f}?number=3'
+    data, status, error = _fetch_with_proxy(url, timeout=15, method='GET', headers={'User-Agent': 'GhostNav/1.0'})
+    if error:
+        print(f'[OSRM] Nearest error: {error}')
+        return (lon, lat)
+    try:
+        result = json.loads(data)
+        waypoints = result.get('waypoints') or []
+        if not waypoints:
+            return (lon, lat)
+        best_location = tuple(waypoints[0]['location'])
+        best_score = float('-inf')
+        for wp in waypoints:
+            cand_lon, cand_lat = wp['location']
+            score = 0.0
+            if reference_route_coords and len(reference_route_coords) >= 2:
+                score += min_dist_to_polyline(reference_route_coords, cand_lat, cand_lon)
+            if cluster_center:
+                score += haversine(cand_lat, cand_lon, cluster_center[0], cluster_center[1]) * 0.25
+            score -= wp.get('distance', 0.0) * 0.1
+            if score > best_score:
+                best_score = score
+                best_location = (cand_lon, cand_lat)
+        return best_location
+    except Exception as e:
+        print(f'[OSRM] Nearest JSON parse error: {e}')
+        return (lon, lat)
+
+
+def build_cluster_corridor_waypoints(cluster, route_coords, route_chainages):
+    """
+    Build snapped corridor entry/exit waypoints for a camera cluster.
+    Entry is 200m before the cluster interval on the route; exit is 200m after.
+    """
+    projections = []
+    for cam in cluster['cameras']:
+        proj = project_point_to_route(route_coords, cam['lat'], cam['lon'], route_chainages)
+        if proj:
+            projections.append(proj)
+    if not projections:
+        return []
+
+    cluster_start = max(0.0, min(p['chainage'] for p in projections) - 200.0)
+    cluster_end = min(route_chainages[-1], max(p['chainage'] for p in projections) + 200.0)
+    if cluster_end <= cluster_start:
+        return []
+
+    entry_raw = point_at_chainage(route_coords, route_chainages, cluster_start)
+    exit_raw = point_at_chainage(route_coords, route_chainages, cluster_end)
+    if not entry_raw or not exit_raw:
+        return []
+
+    local_start = max(0.0, cluster_start - 150.0)
+    local_end = min(route_chainages[-1], cluster_end + 150.0)
+    local_window = []
+    for idx, coord in enumerate(route_coords):
+        if local_start <= route_chainages[idx] <= local_end:
+            local_window.append(coord)
+    if len(local_window) < 2:
+        local_window = route_coords
+
+    entry_lon, entry_lat = snap_to_nearest_road(entry_raw[1], entry_raw[0], local_window, (cluster['lat'], cluster['lon']))
+    exit_lon, exit_lat = snap_to_nearest_road(exit_raw[1], exit_raw[0], local_window, (cluster['lat'], cluster['lon']))
+    entry_chainage = project_point_to_route(route_coords, entry_lat, entry_lon, route_chainages)
+    exit_chainage = project_point_to_route(route_coords, exit_lat, exit_lon, route_chainages)
+
+    return [
+        {
+            'kind': 'entry',
+            'chainage': entry_chainage['chainage'] if entry_chainage else cluster_start,
+            'lon': entry_lon,
+            'lat': entry_lat,
+        },
+        {
+            'kind': 'exit',
+            'chainage': exit_chainage['chainage'] if exit_chainage else cluster_end,
+            'lon': exit_lon,
+            'lat': exit_lat,
+        },
+    ]
+
+
 def ghost_route_fn(start_lon, start_lat, end_lon, end_lat):
     """
-    Corridor-based ghost routing:
-    1. Get fastest route + OSRM alternatives
-    2. Find cameras within 50m of each route
-    3. If any alternative has fewer cameras: use it
-    4. Otherwise: cluster cameras on fastest, build bypass waypoints
-    5. Fall back to fastest if ghost is >2x longer
+    Alternatives-first ghost routing:
+    1. Request up to 3 OSRM alternatives for the full trip
+    2. Score each route by cameras within CAMERA_PROXIMITY_M
+    3. Pick the best route under MAX_ROUTE_RATIO of the fastest distance
+    4. If no better alternative exists, inject snapped corridor entry/exit waypoints
+    5. Fall back to fastest if no improvement is found
     """
     start = (start_lon, start_lat)
     end   = (end_lon, end_lat)
@@ -874,112 +1064,107 @@ def ghost_route_fn(start_lon, start_lat, end_lon, end_lat):
             'cameras_avoided': 0,
             'score': 100,
             'fallback': False,
+            'ghost_cameras_on_route': 0,
+            'fastest_cameras_on_route': 0,
+            'distance_ratio': 1.0,
         }, 200
 
-    # Step 4: Check OSRM alternatives (cheapest fix — no Overpass needed)
-    best_alt_route  = None
-    best_alt_cams   = fastest_cam_count
-    best_alt_coords = None
+    # Step 4: Check OSRM alternatives first and pick the lowest camera count
+    # under the fastest-route distance ratio budget.
+    best_candidate = {
+        'route': fastest,
+        'coords': fastest_coords,
+        'cameras': fastest_cam_count,
+        'ratio': 1.0,
+        'method': 'fastest',
+    }
+    for idx, route in enumerate(all_routes[1:], start=1):
+        n, alt_coords = score_route(route)
+        ratio = route['distance'] / fastest_dist if fastest_dist else float('inf')
+        print(f'[Ghost] Alt route {idx}: {n} cameras, {route["distance"]:.0f}m ({ratio:.2f}x fastest)')
+        if ratio > MAX_ROUTE_RATIO:
+            continue
+        if n < best_candidate['cameras'] or (n == best_candidate['cameras'] and route['distance'] < best_candidate['route']['distance']):
+            best_candidate = {
+                'route': route,
+                'coords': alt_coords,
+                'cameras': n,
+                'ratio': ratio,
+                'method': 'osrm_alternative',
+            }
 
-    for alt in all_routes[1:]:
-        n, alt_coords = score_route(alt)
-        ratio = alt['distance'] / fastest_dist
-        print(f'[Ghost] Alt route: {n} cameras, {alt["distance"]:.0f}m ({ratio:.2f}x fastest)')
-        if n < best_alt_cams and ratio < MAX_ROUTE_RATIO:
-            best_alt_cams   = n
-            best_alt_route  = alt
-            best_alt_coords = alt_coords
-
-    if best_alt_route and best_alt_cams < fastest_cam_count:
-        avoided  = fastest_cam_count - best_alt_cams
-        score    = compute_score(best_alt_route['distance'], fastest_dist, avoided, fastest_cam_count)
+    if best_candidate['method'] == 'osrm_alternative' and best_candidate['cameras'] < fastest_cam_count:
+        avoided  = fastest_cam_count - best_candidate['cameras']
+        score    = compute_score(best_candidate['route']['distance'], fastest_dist, avoided, fastest_cam_count)
         print(f'[Ghost] Using OSRM alternative: avoided {avoided} cameras')
         return {
             'fastest_route': fastest_route_out,
             'ghost_route': {
-                'geometry': best_alt_route['geometry'],
-                'coords':   [[c[1], c[0]] for c in best_alt_coords],
-                'distance': best_alt_route['distance'],
-                'duration': best_alt_route['duration'],
-                'cameras':  best_alt_cams,
-                'method':   'osrm_alternative',
+                'geometry': best_candidate['route']['geometry'],
+                'coords':   [[c[1], c[0]] for c in best_candidate['coords']],
+                'distance': best_candidate['route']['distance'],
+                'duration': best_candidate['route']['duration'],
+                'cameras':  best_candidate['cameras'],
+                'method':   best_candidate['method'],
             },
             'cameras_avoided': avoided,
             'score': score,
             'fallback': False,
+            'ghost_cameras_on_route': best_candidate['cameras'],
+            'fastest_cameras_on_route': fastest_cam_count,
+            'distance_ratio': best_candidate['ratio'],
         }, 200
 
-    # Step 5: No good alternative — try geometric bypass via cluster waypoints
-    print('[Ghost] No good OSRM alternative, trying geometric bypass')
+    # Step 5: No good alternative — use corridor entry/exit waypoints, ordered
+    # by projected distance along the fastest route.
+    print('[Ghost] No good OSRM alternative, trying corridor waypoint injection')
 
     hit_cameras = [cam for cam in cameras
                    if min_dist_to_polyline(fastest_coords, cam['lat'], cam['lon']) <= CAMERA_PROXIMITY_M]
     clusters = cluster_cameras(hit_cameras)
     print(f'[Ghost] {len(hit_cameras)} cameras in {len(clusters)} clusters')
 
-    best_ghost = None
-    best_ghost_cams = fastest_cam_count
+    route_chainages = build_route_chainages(fastest_coords)
+    corridor_waypoints = []
+    for cluster in clusters:
+        corridor_waypoints.extend(build_cluster_corridor_waypoints(cluster, fastest_coords, route_chainages))
 
-    # Try multiple offset distances
-    for offset_m in [600, 1000, 1500]:
-        all_bypass_wps = []
-        for cluster in clusters:
-            wps = build_bypass_waypoints(cluster, fastest_coords, offset_m=offset_m)
-            all_bypass_wps.extend(wps)
-
-        if not all_bypass_wps:
-            continue
-
-        # Sort by longitude (proxy for ordering along route in SC, going east)
-        # Use a smarter ordering: project onto route direction
-        route_bearing_overall = math.degrees(math.atan2(
-            (end_lon - start_lon) * math.cos(math.radians((start_lat + end_lat) / 2)),
-            end_lat - start_lat
-        )) % 360
-        # Sort waypoints by projected distance from start
-        def proj_dist(wp):
-            lon, lat = wp
-            dy = (lat - start_lat) * 111320
-            dx = (lon - start_lon) * 111320 * math.cos(math.radians(start_lat))
-            b = math.radians(route_bearing_overall)
-            return dy * math.cos(b) + dx * math.sin(b)  # dot product with route direction
-
-        all_bypass_wps.sort(key=proj_dist)
-
-        # Deduplicate (remove waypoints within 300m of each other)
-        deduped_wps = []
-        for wp in all_bypass_wps:
-            if not deduped_wps:
-                deduped_wps.append(wp)
+    corridor_waypoints.sort(key=lambda wp: wp['chainage'])
+    deduped_waypoints = []
+    for wp in corridor_waypoints:
+        if len(deduped_waypoints) >= MAX_GHOST_WAYPOINTS:
+            break
+        if deduped_waypoints:
+            prev = deduped_waypoints[-1]
+            if abs(wp['chainage'] - prev['chainage']) < 75.0:
                 continue
-            last = deduped_wps[-1]
-            d = haversine(last[1], last[0], wp[1], wp[0])
-            if d >= 300:
-                deduped_wps.append(wp)
+            if haversine(prev['lat'], prev['lon'], wp['lat'], wp['lon']) < 100.0:
+                continue
+        deduped_waypoints.append(wp)
 
-        print(f'[Ghost] Bypass attempt offset={offset_m}m: {len(deduped_wps)} waypoints')
-
-        waypoints = [start] + deduped_wps + [end]
-        ghost = osrm_route(waypoints)
-        if not ghost:
-            continue
-
-        ghost_coords = decode_polyline6(ghost['geometry'])
-        ghost_cams   = count_cameras_on_route(ghost_coords, cameras)
-        ratio        = ghost['distance'] / fastest_dist
-        print(f'[Ghost] Bypass result: {ghost_cams} cameras, {ghost["distance"]:.0f}m ({ratio:.2f}x)')
-
-        if ghost_cams < best_ghost_cams and ratio < MAX_ROUTE_RATIO:
-            best_ghost_cams = ghost_cams
-            best_ghost = ghost
-            best_ghost_coords = ghost_coords
-            if best_ghost_cams == 0:
-                break  # perfect
+    best_ghost = None
+    best_ghost_coords = None
+    best_ghost_cams = fastest_cam_count
+    if deduped_waypoints:
+        print(f'[Ghost] Corridor attempt: {len(deduped_waypoints)} snapped waypoints')
+        waypoints = [start] + [(wp['lon'], wp['lat']) for wp in deduped_waypoints] + [end]
+        approaches = ';'.join(['unrestricted'] * len(waypoints))
+        routed = osrm_route_request(waypoints, alternatives=0, approaches=approaches)
+        if routed:
+            ghost = routed[0]
+            ghost_coords = decode_polyline6(ghost['geometry'])
+            ghost_cams = count_cameras_on_route(ghost_coords, cameras)
+            ratio = ghost['distance'] / fastest_dist if fastest_dist else float('inf')
+            print(f'[Ghost] Corridor result: {ghost_cams} cameras, {ghost["distance"]:.0f}m ({ratio:.2f}x)')
+            if ghost_cams < best_ghost_cams and ratio < MAX_ROUTE_RATIO:
+                best_ghost = ghost
+                best_ghost_coords = ghost_coords
+                best_ghost_cams = ghost_cams
 
     if best_ghost and best_ghost_cams < fastest_cam_count:
         avoided = fastest_cam_count - best_ghost_cams
         score   = compute_score(best_ghost['distance'], fastest_dist, avoided, fastest_cam_count)
-        print(f'[Ghost] Bypass route: avoided {avoided} cameras')
+        print(f'[Ghost] Corridor route: avoided {avoided} cameras')
         return {
             'fastest_route': fastest_route_out,
             'ghost_route': {
@@ -988,11 +1173,14 @@ def ghost_route_fn(start_lon, start_lat, end_lon, end_lat):
                 'distance': best_ghost['distance'],
                 'duration': best_ghost['duration'],
                 'cameras':  best_ghost_cams,
-                'method':   'geometric_bypass',
+                'method':   'corridor_waypoints',
             },
             'cameras_avoided': avoided,
             'score': score,
             'fallback': False,
+            'ghost_cameras_on_route': best_ghost_cams,
+            'fastest_cameras_on_route': fastest_cam_count,
+            'distance_ratio': best_ghost['distance'] / fastest_dist if fastest_dist else None,
         }, 200
 
     # Final fallback
@@ -1007,6 +1195,9 @@ def ghost_route_fn(start_lon, start_lat, end_lon, end_lat):
         'cameras_avoided': 0,
         'score':           50,
         'fallback':        True,
+        'ghost_cameras_on_route': fastest_cam_count,
+        'fastest_cameras_on_route': fastest_cam_count,
+        'distance_ratio': 1.0,
     }, 200
 
 
@@ -1019,11 +1210,22 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         print(f'[{self.address_string()}] {format % args}')
 
+    def _cors_origin(self):
+        path = urllib.parse.urlparse(self.path).path
+        if path.startswith('/api/privacy-proxy') or path.startswith('/api/admin/'):
+            return 'http://localhost:8766'
+        return '*'
+
+    def _send_cors_headers(self):
+        self.send_header('Access-Control-Allow-Origin', self._cors_origin())
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+
     def _send_json(self, data, status=200):
         body = json.dumps(data, indent=2).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._send_cors_headers()
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -1034,13 +1236,13 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
         if error:
             self.send_response(502)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps({'error': error}).encode())
             return
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._send_cors_headers()
         self.end_headers()
         self.wfile.write(data)
 
@@ -1054,13 +1256,13 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
         if error:
             self.send_response(502)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self._send_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps({'error': error}).encode())
             return
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._send_cors_headers()
         self.end_headers()
         self.wfile.write(data)
 
@@ -1074,9 +1276,7 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self._send_cors_headers()
         self.end_headers()
     
     def do_PUT(self):

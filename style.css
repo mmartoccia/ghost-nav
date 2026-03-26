@@ -1773,3 +1773,47 @@ html, body {
 #multistop-privacy-card:hover {
   box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
 }
+
+/* ── Camera FOV Cones (ghost-fov-visualization) ──────────────────────── */
+
+#fov-toggle-btn {
+  position: relative;
+}
+
+#fov-toggle-btn.active {
+  background: rgba(167, 139, 250, 0.15);
+  border-color: var(--accent-ghost);
+  color: var(--accent-ghost);
+}
+
+/* SVG container for FOV cones — pointer-events none except on cones */
+.ghost-fov-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.ghost-fov-cone {
+  pointer-events: all;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.ghost-fov-cone:hover {
+  opacity: 1 !important;
+}
+
+/* FOV tooltip */
+.ghost-fov-tooltip {
+  background: rgba(10, 14, 23, 0.92);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  border-radius: 6px;
+  color: #e8eaf0;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 6px 10px;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
