@@ -4619,3 +4619,669 @@ const CameraFOVLayer = (function() {
   };
 
 })();
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  GHOST-MOBILE-UX — Waze-style mobile navigation module                     ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+(function GhostMobileUX() {
+  'use strict';
+
+  const isMobile = () => window.innerWidth <= 768;
+
+  // ── Bottom Sheet state ────────────────────────────────────────────────────
+  let sheetState = 'peek'; // 'peek' | 'open'
+  let touchStartY = 0;
+  let touchStartSheetY = 0;
+
+  const sheet        = document.getElementById('ghost-bottom-sheet');
+  const sheetToggle  = document.getElementById('bottom-sheet-toggle');
+  const bsheetTitle  = document.getElementById('bsheet-title');
+  const bsheetSub    = document.getElementById('bsheet-sub');
+  const bsheetArrow  = document.getElementById('bsheet-arrow');
+  const bsheetSummary = document.getElementById('bsheet-route-summary');
+
+  function setSheetState(state) {
+    sheetState = state;
+    sheet.classList.remove('sheet-peek', 'sheet-open');
+    sheet.classList.add(state === 'open' ? 'sheet-open' : 'sheet-peek');
+    // Show/hide floating search preview
+    const floatSearch = document.getElementById('ghost-mobile-search');
+    if (floatSearch) {
+      floatSearch.style.display = (isMobile() && state === 'peek') ? 'flex' : 'none';
+    }
+  }
+
+  function toggleSheet() {
+    setSheetState(sheetState === 'open' ? 'peek' : 'open');
+  }
+
+  if (sheetToggle) {
+    sheetToggle.addEventListener('click', toggleSheet);
+  }
+
+  // Handle bar drag for sheet
+  if (sheet) {
+    const handleBar = sheet.querySelector('.bottom-sheet-handle-bar');
+    if (handleBar) {
+      handleBar.addEventListener('touchstart', (e) => {
+        touchStartY = e.touches[0].clientY;
+      }, { passive: true });
+
+      handleBar.addEventListener('touchend', (e) => {
+        const deltaY = e.changedTouches[0].clientY - touchStartY;
+        if (deltaY < -40) {
+          setSheetState('open');
+        } else if (deltaY > 40) {
+          setSheetState('peek');
+        }
+      }, { passive: true });
+    }
+  }
+
+  // ── Mobile search sync with main inputs ──────────────────────────────────
+  function syncMobileSearch() {
+    const startMain  = document.getElementById('start-input');
+    const endMain    = document.getElementById('end-input');
+    const mobileFrom = document.getElementById('mobile-start-input');
+    const mobileTo   = document.getElementById('mobile-end-input');
+    const previewFrom = document.getElementById('mobile-search-from-preview');
+    const previewTo  = document.getElementById('mobile-search-to-preview');
+
+    if (!startMain || !endMain) return;
+
+    function sync() {
+      if (mobileFrom) mobileFrom.value  = startMain.value;
+      if (mobileTo)   mobileTo.value    = endMain.value;
+      if (previewFrom) previewFrom.value = startMain.value;
+      if (previewTo)  previewTo.value   = endMain.value;
+    }
+
+    startMain.addEventListener('input', sync);
+    endMain.addEventListener('input', sync);
+
+    // Mirror mobile inputs back to main
+    if (mobileFrom) {
+      mobileFrom.addEventListener('input', () => {
+        startMain.value = mobileFrom.value;
+        startMain.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      mobileFrom.addEventListener('focus', () => {
+        setSheetState('open');
+      });
+    }
+
+    if (mobileTo) {
+      mobileTo.addEventListener('input', () => {
+        endMain.value = mobileTo.value;
+        endMain.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      mobileTo.addEventListener('focus', () => {
+        setSheetState('open');
+      });
+    }
+
+    // Floating preview taps open sheet
+    if (previewFrom) {
+      previewFrom.addEventListener('click', () => setSheetState('open'));
+    }
+    if (previewTo) {
+      previewTo.addEventListener('click', () => setSheetState('open'));
+    }
+  }
+
+  // Swap button sync
+  const mobileSwapBtn = document.getElementById('mobile-swap-btn');
+  if (mobileSwapBtn) {
+    mobileSwapBtn.addEventListener('click', () => {
+      const swapMain = document.getElementById('swap-btn');
+      if (swapMain) swapMain.click();
+      // Sync values after swap
+      setTimeout(syncMobileSearch, 50);
+    });
+  }
+
+  // Mobile use-location button
+  const mobileUseLoc = document.getElementById('mobile-use-location');
+  if (mobileUseLoc) {
+    mobileUseLoc.addEventListener('click', () => {
+      const mainLocBtn = document.getElementById('use-location');
+      if (mainLocBtn) mainLocBtn.click();
+    });
+  }
+
+  // ── FAB button actions ────────────────────────────────────────────────────
+  const fabStartRoute = document.getElementById('fab-start-route');
+  const fabRecenter   = document.getElementById('fab-recenter');
+  const fabShare      = document.getElementById('fab-share');
+
+  if (fabStartRoute) {
+    fabStartRoute.addEventListener('click', () => {
+      // If route already calculated, start live navigation
+      const routeResults = document.getElementById('bsheet-route-summary');
+      if (routeResults && routeResults.style.display !== 'none') {
+        startLiveNavigation();
+      } else {
+        // Otherwise trigger route calculation
+        const startInput = document.getElementById('start-input');
+        const endInput   = document.getElementById('end-input');
+        if (startInput && startInput.value && endInput && endInput.value) {
+          // Trigger route fetch by calling the global fetchRoutes if available
+          if (typeof fetchRoutes === 'function') {
+            fetchRoutes();
+          }
+        } else {
+          // Open sheet to fill in addresses
+          setSheetState('open');
+          const mobileFrom = document.getElementById('mobile-start-input');
+          if (mobileFrom) mobileFrom.focus();
+        }
+      }
+    });
+  }
+
+  if (fabRecenter) {
+    fabRecenter.addEventListener('click', () => {
+      if (typeof map !== 'undefined' && map) {
+        if (typeof startCoords !== 'undefined' && startCoords) {
+          map.setView([startCoords.lat, startCoords.lng], 15, { animate: true });
+        } else if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition((pos) => {
+            map.setView([pos.coords.latitude, pos.coords.longitude], 15, { animate: true });
+          });
+        }
+      }
+    });
+  }
+
+  if (fabShare) {
+    fabShare.addEventListener('click', () => {
+      const shareBtn = document.getElementById('share-btn');
+      if (shareBtn && !shareBtn.classList.contains('hidden')) {
+        shareBtn.click();
+      } else {
+        // Copy current URL
+        navigator.clipboard.writeText(window.location.href).catch(() => {});
+        showMobileToast('🔗 Link copied!');
+      }
+    });
+  }
+
+  // ── Turn bar ──────────────────────────────────────────────────────────────
+  const turnBar       = document.getElementById('ghost-turn-bar');
+  const turnBarIcon   = document.getElementById('turn-bar-icon');
+  const turnBarDist   = document.getElementById('turn-bar-distance');
+  const turnBarStreet = document.getElementById('turn-bar-street');
+  const turnBarClose  = document.getElementById('turn-bar-close');
+
+  if (turnBarClose) {
+    turnBarClose.addEventListener('click', () => {
+      turnBar.classList.remove('visible');
+      document.body.classList.remove('turn-bar-active');
+      stopLiveNavigation();
+    });
+  }
+
+  function showTurnBar(icon, distance, street) {
+    if (!isMobile()) return;
+    turnBarIcon.textContent   = icon || '↑';
+    turnBarDist.textContent   = distance || '';
+    turnBarStreet.textContent = street || '';
+    turnBar.classList.add('visible');
+    document.body.classList.add('turn-bar-active');
+  }
+
+  function hideTurnBar() {
+    if (turnBar) {
+      turnBar.classList.remove('visible');
+      document.body.classList.remove('turn-bar-active');
+    }
+  }
+
+  // ── ALPR alert banner ─────────────────────────────────────────────────────
+  const alprAlert     = document.getElementById('ghost-alpr-alert');
+  const alprAlertDist = document.getElementById('alpr-alert-dist');
+  let alprAlertTimer  = null;
+
+  function showAlprAlert(distanceM) {
+    if (!isMobile()) return;
+    const distLabel = distanceM < 1000
+      ? Math.round(distanceM) + 'm'
+      : (distanceM / 1000).toFixed(1) + 'km';
+    alprAlertDist.textContent = distLabel;
+    alprAlert.classList.add('visible');
+    // Auto-hide after 8s
+    clearTimeout(alprAlertTimer);
+    alprAlertTimer = setTimeout(() => {
+      alprAlert.classList.remove('visible');
+    }, 8000);
+  }
+
+  function hideAlprAlert() {
+    if (alprAlert) alprAlert.classList.remove('visible');
+    clearTimeout(alprAlertTimer);
+  }
+
+  // ── Camera proximity check along active route ─────────────────────────────
+  // Called when user's position or route changes; looks for cameras within 200m
+  function checkAlprProximity(userLat, userLng) {
+    if (!window.cameras || !window.cameras.length) return;
+    let closestDist = Infinity;
+    let closestCam = null;
+
+    for (const cam of window.cameras) {
+      if (!cam.lat || !cam.lon) continue;
+      const dist = haversineSimple(userLat, userLng, cam.lat, cam.lon);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestCam = cam;
+      }
+    }
+
+    if (closestDist <= 200) {
+      showAlprAlert(closestDist);
+      // Add pulse class to nearby camera markers
+      if (closestCam && window.cameraMarkers) {
+        window.cameraMarkers.forEach((m) => {
+          const pos = m.getLatLng();
+          const d = haversineSimple(pos.lat, pos.lng, closestCam.lat, closestCam.lon);
+          if (d < 50 && m._icon) {
+            m._icon.classList.add('alpr-nearby-pulse');
+          } else if (m._icon) {
+            m._icon.classList.remove('alpr-nearby-pulse');
+          }
+        });
+      }
+    } else {
+      hideAlprAlert();
+    }
+  }
+
+  function haversineSimple(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  // ── Live navigation mode ──────────────────────────────────────────────────
+  let liveNavWatchId   = null;
+  let liveNavActive    = false;
+  let liveNavRouteCoords = [];
+
+  function startLiveNavigation() {
+    if (!navigator.geolocation) {
+      showMobileToast('⚠ Location not available');
+      return;
+    }
+    liveNavActive = true;
+    fabStartRoute.textContent = '⏹';
+    fabStartRoute.title = 'Stop navigation';
+    showMobileToast('🟢 Live navigation started');
+    showTurnBar('🧭', 'Locating…', 'Getting GPS…');
+
+    // Capture current active route coords
+    if (typeof routeLayers !== 'undefined' && routeLayers.length > 0) {
+      const ghostLayer = routeLayers.find(r => r.type === 'ghost') || routeLayers[0];
+      if (ghostLayer && ghostLayer.layer && ghostLayer.layer.getLatLngs) {
+        liveNavRouteCoords = ghostLayer.layer.getLatLngs().map(ll => ({ lat: ll.lat, lng: ll.lng }));
+      }
+    }
+
+    liveNavWatchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng, heading, speed } = pos.coords;
+
+        // Check ALPR proximity
+        checkAlprProximity(lat, lng);
+
+        // Update turn bar with bearing info
+        const icon = getBearingIcon(heading);
+        const speedKph = speed ? Math.round(speed * 3.6) + ' km/h' : '';
+        const nextStep = getNextTurnStep(lat, lng, liveNavRouteCoords);
+
+        if (nextStep) {
+          showTurnBar(nextStep.icon, nextStep.distLabel, nextStep.street);
+        } else {
+          showTurnBar(icon || '↑', speedKph, 'On route');
+        }
+
+        // Pan map to user position
+        if (typeof map !== 'undefined' && map) {
+          map.setView([lat, lng], Math.max(map.getZoom(), 16), { animate: true });
+        }
+      },
+      (err) => {
+        console.warn('[GhostMobileUX] Geolocation error:', err.message);
+      },
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+    );
+  }
+
+  function stopLiveNavigation() {
+    liveNavActive = false;
+    if (liveNavWatchId !== null) {
+      navigator.geolocation.clearWatch(liveNavWatchId);
+      liveNavWatchId = null;
+    }
+    if (fabStartRoute) {
+      fabStartRoute.textContent = '▶';
+      fabStartRoute.title = 'Start route';
+    }
+    hideTurnBar();
+    hideAlprAlert();
+  }
+
+  function getBearingIcon(heading) {
+    if (heading === null || heading === undefined) return '↑';
+    const h = ((heading % 360) + 360) % 360;
+    if (h < 22.5 || h >= 337.5)  return '↑';
+    if (h < 67.5)   return '↗';
+    if (h < 112.5)  return '→';
+    if (h < 157.5)  return '↘';
+    if (h < 202.5)  return '↓';
+    if (h < 247.5)  return '↙';
+    if (h < 292.5)  return '←';
+    return '↖';
+  }
+
+  function getNextTurnStep(userLat, userLng, routeCoords) {
+    if (!routeCoords || routeCoords.length < 2) return null;
+    // Find closest point on route
+    let minDist = Infinity;
+    let closestIdx = 0;
+    for (let i = 0; i < routeCoords.length; i++) {
+      const d = haversineSimple(userLat, userLng, routeCoords[i].lat, routeCoords[i].lng);
+      if (d < minDist) {
+        minDist = d;
+        closestIdx = i;
+      }
+    }
+    // Lookahead 200m for next significant turn
+    let lookahead = closestIdx + 1;
+    let cumDist = 0;
+    while (lookahead < routeCoords.length - 1 && cumDist < 500) {
+      cumDist += haversineSimple(
+        routeCoords[lookahead-1].lat, routeCoords[lookahead-1].lng,
+        routeCoords[lookahead].lat,   routeCoords[lookahead].lng
+      );
+      // Detect bearing change > 25deg as a turn
+      if (lookahead + 1 < routeCoords.length) {
+        const b1 = bearing(routeCoords[lookahead-1], routeCoords[lookahead]);
+        const b2 = bearing(routeCoords[lookahead], routeCoords[lookahead+1]);
+        const delta = Math.abs(b2 - b1);
+        const turn = Math.min(delta, 360 - delta);
+        if (turn > 25) {
+          const icon = turn > 90 ? (b2 > b1 ? '↱' : '↰') : (b2 > b1 ? '↗' : '↖');
+          const distLabel = cumDist < 1000
+            ? Math.round(cumDist / 10) * 10 + ' m'
+            : (cumDist / 1000).toFixed(1) + ' km';
+          return { icon, distLabel, street: 'In ' + distLabel };
+        }
+      }
+      lookahead++;
+    }
+    // Just show distance to end
+    let remaining = 0;
+    for (let i = closestIdx; i < routeCoords.length - 1; i++) {
+      remaining += haversineSimple(routeCoords[i].lat, routeCoords[i].lng, routeCoords[i+1].lat, routeCoords[i+1].lng);
+    }
+    if (remaining < 50) return { icon: '🏁', distLabel: 'Arrive!', street: 'Destination' };
+    const distLabel = remaining < 1000
+      ? Math.round(remaining / 10) * 10 + ' m'
+      : (remaining / 1000).toFixed(1) + ' km';
+    return { icon: '↑', distLabel, street: 'Continue on route' };
+  }
+
+  function bearing(a, b) {
+    const dLon = (b.lng - a.lng) * Math.PI / 180;
+    const lat1 = a.lat * Math.PI / 180;
+    const lat2 = b.lat * Math.PI / 180;
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+
+  // ── Route summary in bottom sheet ────────────────────────────────────────
+  // Hook into route calculation completion
+  function updateBottomSheetRoute(fastestItem, ghostItem) {
+    if (!isMobile() || !bsheetSummary) return;
+
+    function fmtDist(m) {
+      return m >= 1000 ? (m/1000).toFixed(1) + ' km' : Math.round(m) + ' m';
+    }
+    function fmtTime(s) {
+      const m = Math.round(s / 60);
+      return m >= 60 ? Math.floor(m/60) + 'h ' + (m%60) + 'min' : m + ' min';
+    }
+
+    let html = '';
+
+    if (fastestItem) {
+      const fc = fastestItem.cameras || 0;
+      html += `
+        <div class="bsheet-route-row">
+          <div class="bsheet-route-label">⚡ FASTEST ROUTE</div>
+          <div class="bsheet-route-stats">
+            <div class="bsheet-stat">
+              <div class="bsheet-stat-val">${fmtDist(fastestItem.distance || 0)}</div>
+              <div class="bsheet-stat-label">Distance</div>
+            </div>
+            <div class="bsheet-stat">
+              <div class="bsheet-stat-val">${fmtTime(fastestItem.duration || 0)}</div>
+              <div class="bsheet-stat-label">Est. Time</div>
+            </div>
+            <div class="bsheet-stat">
+              <div class="bsheet-stat-val bsheet-cam-val">${fc}</div>
+              <div class="bsheet-stat-label">📷 Cameras</div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    if (ghostItem) {
+      const gc = ghostItem.cameras || 0;
+      const saved = fastestItem ? Math.max(0, (fastestItem.cameras || 0) - gc) : 0;
+      html += `
+        <div class="bsheet-route-row bsheet-ghost">
+          <div class="bsheet-route-label">👻 PRIVACY ROUTE${saved > 0 ? ' — ' + saved + ' fewer cameras' : ''}</div>
+          <div class="bsheet-route-stats">
+            <div class="bsheet-stat">
+              <div class="bsheet-stat-val">${fmtDist(ghostItem.distance || 0)}</div>
+              <div class="bsheet-stat-label">Distance</div>
+            </div>
+            <div class="bsheet-stat">
+              <div class="bsheet-stat-val">${fmtTime(ghostItem.duration || 0)}</div>
+              <div class="bsheet-stat-label">Est. Time</div>
+            </div>
+            <div class="bsheet-stat">
+              <div class="bsheet-stat-val bsheet-cam-val ${gc <= 2 ? 'safe' : ''}">${gc}</div>
+              <div class="bsheet-stat-label">📷 Cameras</div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    if (html) {
+      bsheetSummary.innerHTML = html;
+      bsheetSummary.style.display = 'flex';
+      if (bsheetTitle) bsheetTitle.textContent = ghostItem ? '👻 Route Ready' : '⚡ Route Ready';
+      if (bsheetSub) {
+        const gc = ghostItem ? ghostItem.cameras : (fastestItem ? fastestItem.cameras : 0);
+        const saved = (fastestItem && ghostItem) ? Math.max(0, fastestItem.cameras - gc) : 0;
+        bsheetSub.textContent = saved > 0
+          ? `Privacy route avoids ${saved} camera${saved > 1 ? 's' : ''}`
+          : `Tap ▶ to start navigation`;
+      }
+      // Peek the sheet to show summary
+      setSheetState('peek');
+      // Also enable the FAB start button
+      if (fabStartRoute) {
+        fabStartRoute.style.background = '#22c55e';
+      }
+    }
+  }
+
+  // ── Mobile toast notification ─────────────────────────────────────────────
+  function showMobileToast(msg) {
+    const existing = document.getElementById('ghost-mobile-toast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.id = 'ghost-mobile-toast';
+    toast.style.cssText = `
+      position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,0.85);color:#22c55e;
+      padding:8px 18px;border-radius:20px;font-family:monospace;
+      font-size:13px;z-index:9999;pointer-events:none;
+      animation: fadeInUp 0.2s ease forwards;
+    `;
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  function init() {
+    if (!isMobile()) return;
+
+    // Show sheet in peek state
+    setSheetState('peek');
+
+    // Show floating search when sheet is peeked
+    const floatSearch = document.getElementById('ghost-mobile-search');
+    if (floatSearch) {
+      floatSearch.style.display = 'flex';
+    }
+
+    syncMobileSearch();
+
+    // Listen for route calculation results to update bottom sheet
+    // We observe #panel-results becoming visible (via MutationObserver)
+    const panelResults = document.getElementById('panel-results');
+    if (panelResults) {
+      const observer = new MutationObserver(() => {
+        if (!panelResults.classList.contains('hidden')) {
+          // Extract route data from existing DOM for bottom sheet
+          setTimeout(extractAndShowRouteInSheet, 200);
+        }
+      });
+      observer.observe(panelResults, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    // Watch for ALPR cameras via ghost-nav-toggle (live alerts)
+    const navToggle = document.getElementById('ghost-nav-toggle');
+    if (navToggle) {
+      // Mirror live alert proximity badge text into ALPR banner
+      const proximityBadge = document.getElementById('ghost-proximity-badge');
+      if (proximityBadge) {
+        const badgeObserver = new MutationObserver(() => {
+          const txt = proximityBadge.textContent || '';
+          if (txt.includes('camera') && !txt.includes('No cameras')) {
+            // Extract distance if present
+            const match = txt.match(/(\d+)m/);
+            if (match) showAlprAlert(parseInt(match[1]));
+          } else {
+            hideAlprAlert();
+          }
+        });
+        badgeObserver.observe(proximityBadge, { childList: true, characterData: true, subtree: true });
+      }
+    }
+
+    // Recenter also recenters on geolocation
+    if (fabRecenter) {
+      // Track user position for recenter
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          fabRecenter._userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        }, () => {}, { enableHighAccuracy: true });
+      }
+    }
+  }
+
+  function extractAndShowRouteInSheet() {
+    // Pull data from the existing route-results DOM or RCP panel
+    const rcpNormalDist  = document.getElementById('rcp-normal-distance');
+    const rcpNormalTime  = document.getElementById('rcp-normal-time');
+    const rcpNormalCams  = document.getElementById('rcp-normal-cameras');
+    const rcpPrivDist    = document.getElementById('rcp-privacy-distance');
+    const rcpPrivTime    = document.getElementById('rcp-privacy-time');
+    const rcpPrivCams    = document.getElementById('rcp-privacy-cameras');
+
+    let fastest = null;
+    let ghost   = null;
+
+    if (rcpNormalDist && rcpNormalDist.textContent !== '—') {
+      // Parse from text
+      const parseDist = (s) => {
+        if (!s || s === '—') return 0;
+        const km = s.match(/([\d.]+)\s*km/);
+        const m  = s.match(/([\d.]+)\s*m/);
+        return km ? parseFloat(km[1]) * 1000 : (m ? parseFloat(m[1]) : 0);
+      };
+      const parseTime = (s) => {
+        if (!s || s === '—') return 0;
+        const h = s.match(/(\d+)h/), min = s.match(/(\d+)\s*min/);
+        return (h ? parseInt(h[1]) * 3600 : 0) + (min ? parseInt(min[1]) * 60 : 0);
+      };
+      const parseCams = (s) => parseInt(s) || 0;
+
+      fastest = {
+        distance: parseDist(rcpNormalDist.textContent),
+        duration: parseTime(rcpNormalTime.textContent),
+        cameras:  parseCams(rcpNormalCams ? rcpNormalCams.textContent : '0'),
+      };
+
+      if (rcpPrivDist && rcpPrivDist.textContent !== '—') {
+        ghost = {
+          distance: parseDist(rcpPrivDist.textContent),
+          duration: parseTime(rcpPrivTime.textContent),
+          cameras:  parseCams(rcpPrivCams ? rcpPrivCams.textContent : '0'),
+        };
+      }
+    } else {
+      // Fallback: look in route-cards
+      const cards = document.querySelectorAll('.route-card');
+      if (cards.length > 0) {
+        const getStatVal = (card, idx) => {
+          const vals = card.querySelectorAll('.stat-value');
+          return vals[idx] ? vals[idx].textContent : '';
+        };
+        // Build minimal items from cards
+        if (cards[0]) {
+          fastest = { distance: 0, duration: 0, cameras: parseInt(getStatVal(cards[0], 2)) || 0 };
+        }
+        if (cards[1]) {
+          ghost = { distance: 0, duration: 0, cameras: parseInt(getStatVal(cards[1], 2)) || 0 };
+        }
+      }
+    }
+
+    updateBottomSheetRoute(fastest, ghost);
+  }
+
+  // Expose updateBottomSheetRoute globally so displayRouteComparison can call it
+  window.GhostMobileUX = {
+    updateBottomSheetRoute,
+    showAlprAlert,
+    hideAlprAlert,
+    showTurnBar,
+    hideTurnBar,
+    checkAlprProximity,
+    startLiveNavigation,
+    stopLiveNavigation,
+    setSheetState,
+    showMobileToast,
+    isMobile,
+  };
+
+  // Wait for DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();

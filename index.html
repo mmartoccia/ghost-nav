@@ -631,6 +631,90 @@
     </div>
   </div>
 
+  <!-- ── GHOST-MOBILE-UX: Waze-style mobile elements ─────────────────────── -->
+
+  <!-- Turn-by-turn instruction bar -->
+  <div id="ghost-turn-bar">
+    <div class="turn-bar-icon" id="turn-bar-icon">↑</div>
+    <div class="turn-bar-info">
+      <div class="turn-bar-distance" id="turn-bar-distance">0 m</div>
+      <div class="turn-bar-street" id="turn-bar-street">Starting route…</div>
+    </div>
+    <button class="turn-bar-close" id="turn-bar-close" title="Close navigation bar">✕</button>
+  </div>
+
+  <!-- ALPR camera proximity alert banner -->
+  <div id="ghost-alpr-alert">
+    <div class="alpr-alert-dot"></div>
+    <div class="alpr-alert-text">⚠ ALPR AHEAD</div>
+    <div class="alpr-alert-dist" id="alpr-alert-dist">200m</div>
+  </div>
+
+  <!-- FAB button cluster -->
+  <div id="ghost-fab-cluster">
+    <button class="ghost-fab ghost-fab-secondary" id="fab-share" title="Share route" style="position:relative">
+      🔗
+      <span class="ghost-fab-label">Share</span>
+    </button>
+    <button class="ghost-fab ghost-fab-secondary" id="fab-recenter" title="Recenter map" style="position:relative">
+      📍
+      <span class="ghost-fab-label">Recenter</span>
+    </button>
+    <button class="ghost-fab ghost-fab-primary" id="fab-start-route" title="Start route" style="position:relative">
+      ▶
+      <span class="ghost-fab-label">Start Route</span>
+    </button>
+  </div>
+
+  <!-- Bottom sheet (route summary drawer) -->
+  <div id="ghost-bottom-sheet">
+    <div class="bottom-sheet-handle-bar">
+      <div class="bottom-sheet-handle"></div>
+    </div>
+    <div class="bottom-sheet-peek-row" id="bottom-sheet-toggle">
+      <div>
+        <div class="bottom-sheet-peek-title" id="bsheet-title">Ghost Navigation</div>
+        <div class="bottom-sheet-peek-sub" id="bsheet-sub">Enter start and destination</div>
+      </div>
+      <div class="bottom-sheet-peek-arrow" id="bsheet-arrow">▲</div>
+    </div>
+    <div class="bottom-sheet-content">
+      <!-- Mobile search inputs -->
+      <div id="ghost-mobile-search-inner">
+        <div class="mobile-search-row" style="margin-bottom:8px">
+          <div class="mobile-search-dot start"></div>
+          <input type="text" id="mobile-start-input" class="mobile-search-input" placeholder="From: Start address…" autocomplete="off" spellcheck="false" />
+          <button class="mobile-search-swap" id="mobile-swap-btn" title="Swap">↕</button>
+        </div>
+        <div class="mobile-search-row" style="margin-bottom:4px">
+          <div class="mobile-search-dot end"></div>
+          <input type="text" id="mobile-end-input" class="mobile-search-input" placeholder="To: Destination…" autocomplete="off" spellcheck="false" />
+        </div>
+        <button id="mobile-use-location" style="display:flex;align-items:center;gap:6px;width:100%;margin-top:6px;padding:10px 14px;background:rgba(34,197,94,0.08);border:1px dashed rgba(34,197,94,0.35);border-radius:8px;color:#22c55e;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;">
+          📍 Use My Location
+        </button>
+      </div>
+
+      <!-- Route summary (shown after route calculated) -->
+      <div id="bsheet-route-summary" class="bsheet-route-summary" style="display:none;margin-top:12px">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile floating search bar (overlay on map) — shown when sheet is collapsed -->
+  <div id="ghost-mobile-search" style="display:none">
+    <div class="mobile-search-row">
+      <div class="mobile-search-dot start"></div>
+      <input type="text" id="mobile-search-from-preview" class="mobile-search-input" readonly placeholder="From…" style="cursor:pointer" />
+    </div>
+    <div class="mobile-search-row">
+      <div class="mobile-search-dot end"></div>
+      <input type="text" id="mobile-search-to-preview" class="mobile-search-input" readonly placeholder="To…" style="cursor:pointer" />
+    </div>
+  </div>
+  <!-- ── END GHOST-MOBILE-UX ──────────────────────────────────────────────── -->
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/leaflet.heat/dist/leaflet-heat.js"></script>
   <script src="js/jurisdiction-layer.js"></script>

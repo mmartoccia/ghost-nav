@@ -1817,3 +1817,513 @@ html, body {
   white-space: nowrap;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
+
+/* ============================================================
+   GHOST-MOBILE-UX — Waze-style mobile navigation UI
+   ============================================================ */
+
+/* ── Turn-by-turn instruction bar (fixed top, mobile) ─────────── */
+#ghost-turn-bar {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2500;
+  background: #1a2236;
+  border-bottom: 2px solid #22c55e;
+  padding: 10px 16px;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  min-height: 56px;
+}
+
+#ghost-turn-bar.visible {
+  display: flex;
+}
+
+.turn-bar-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+  min-width: 36px;
+  text-align: center;
+}
+
+.turn-bar-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.turn-bar-distance {
+  font-size: 22px;
+  font-weight: 800;
+  color: #22c55e;
+  font-family: monospace;
+  line-height: 1;
+}
+
+.turn-bar-street {
+  font-size: 14px;
+  color: #e8eaf0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.turn-bar-close {
+  background: none;
+  border: none;
+  color: #8892a4;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px;
+  flex-shrink: 0;
+}
+
+/* ── ALPR camera alert banner (fixed, below turn bar) ──────────── */
+#ghost-alpr-alert {
+  display: none;
+  position: fixed;
+  top: 56px;
+  left: 0;
+  right: 0;
+  z-index: 2400;
+  background: rgba(220, 38, 38, 0.95);
+  color: white;
+  padding: 10px 16px;
+  align-items: center;
+  gap: 10px;
+  animation: alpr-pulse-bg 1s ease-in-out infinite alternate;
+}
+
+#ghost-alpr-alert.visible {
+  display: flex;
+}
+
+@keyframes alpr-pulse-bg {
+  from { background: rgba(220, 38, 38, 0.9); }
+  to   { background: rgba(185, 28, 28, 1);   }
+}
+
+.alpr-alert-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  flex-shrink: 0;
+  animation: alpr-dot-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes alpr-dot-pulse {
+  from { transform: scale(1);   opacity: 1;   }
+  to   { transform: scale(1.5); opacity: 0.6; }
+}
+
+.alpr-alert-text {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: monospace;
+  flex: 1;
+}
+
+.alpr-alert-dist {
+  font-size: 12px;
+  font-family: monospace;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+/* ── Bottom sheet (slide-up drawer) ───────────────────────────── */
+#ghost-bottom-sheet {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  background: #111827;
+  border-top: 1px solid #2a3a56;
+  border-radius: 16px 16px 0 0;
+  transform: translateY(100%);
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+  max-height: 75vh;
+  overflow-y: auto;
+  box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
+}
+
+#ghost-bottom-sheet.sheet-peek {
+  transform: translateY(calc(100% - 80px));
+}
+
+#ghost-bottom-sheet.sheet-open {
+  transform: translateY(0);
+}
+
+.bottom-sheet-handle-bar {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 0;
+  cursor: grab;
+}
+
+.bottom-sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: #374151;
+  border-radius: 2px;
+}
+
+.bottom-sheet-peek-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 8px;
+  cursor: pointer;
+}
+
+.bottom-sheet-peek-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #22c55e;
+  font-family: monospace;
+}
+
+.bottom-sheet-peek-sub {
+  font-size: 12px;
+  color: #8892a4;
+  font-family: monospace;
+}
+
+.bottom-sheet-peek-arrow {
+  font-size: 16px;
+  color: #8892a4;
+  transition: transform 0.3s;
+}
+
+#ghost-bottom-sheet.sheet-open .bottom-sheet-peek-arrow {
+  transform: rotate(180deg);
+}
+
+.bottom-sheet-content {
+  padding: 4px 16px 24px;
+}
+
+/* ── Route summary card inside bottom sheet ───────────────────── */
+.bsheet-route-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bsheet-route-row {
+  background: rgba(26,34,54,0.8);
+  border: 1px solid #2a3a56;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.bsheet-route-row.bsheet-ghost {
+  border-color: rgba(34,197,94,0.4);
+  background: rgba(34,197,94,0.06);
+}
+
+.bsheet-route-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8892a4;
+  margin-bottom: 6px;
+}
+
+.bsheet-route-row.bsheet-ghost .bsheet-route-label {
+  color: #22c55e;
+}
+
+.bsheet-route-stats {
+  display: flex;
+  gap: 20px;
+}
+
+.bsheet-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bsheet-stat-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: #e8eaf0;
+  font-family: monospace;
+  line-height: 1;
+}
+
+.bsheet-stat-label {
+  font-size: 10px;
+  color: #8892a4;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bsheet-cam-val { color: #ef4444; }
+.bsheet-cam-val.safe { color: #22c55e; }
+
+/* ── FAB button cluster ───────────────────────────────────────── */
+#ghost-fab-cluster {
+  position: fixed;
+  bottom: 88px;
+  right: 16px;
+  z-index: 1900;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.ghost-fab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  border-radius: 50%;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.2s;
+  font-size: 20px;
+}
+
+.ghost-fab:active {
+  transform: scale(0.92);
+}
+
+.ghost-fab-primary {
+  width: 56px;
+  height: 56px;
+  background: #22c55e;
+  color: #000;
+  font-size: 22px;
+}
+
+.ghost-fab-primary:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(34,197,94,0.5);
+}
+
+.ghost-fab-secondary {
+  width: 44px;
+  height: 44px;
+  background: #1a2236;
+  color: #e8eaf0;
+  border: 1px solid #2a3a56;
+  font-size: 18px;
+}
+
+.ghost-fab-secondary:hover {
+  background: #2a3a56;
+  transform: scale(1.06);
+}
+
+/* FAB label tooltip */
+.ghost-fab-label {
+  position: absolute;
+  right: 100%;
+  margin-right: 8px;
+  background: rgba(0,0,0,0.85);
+  color: #e8eaf0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ghost-fab:hover .ghost-fab-label,
+.ghost-fab:focus .ghost-fab-label {
+  opacity: 1;
+}
+
+/* ── Mobile-only visibility rules ─────────────────────────────── */
+@media (min-width: 769px) {
+  #ghost-bottom-sheet { display: none !important; }
+  #ghost-fab-cluster  { display: none !important; }
+  #ghost-turn-bar     { display: none !important; }
+  #ghost-alpr-alert   { display: none !important; }
+}
+
+@media (max-width: 768px) {
+  #ghost-bottom-sheet { display: block; }
+  #ghost-fab-cluster  { display: flex; }
+
+  /* Push map content down when turn bar is visible */
+  body.turn-bar-active #map-container {
+    padding-top: 56px;
+  }
+
+  /* Hide header actions on mobile — too cluttered */
+  #header-actions .btn-ghost:not(#clear-btn):not(#share-btn):not(#privacy-proxy-btn) {
+    display: none;
+  }
+
+  /* Compact header for mobile nav feel */
+  #top-bar {
+    padding: 0 12px;
+    height: 48px;
+  }
+
+  .brand-name {
+    font-size: 16px;
+  }
+
+  /* Side panel hidden on mobile (replaced by bottom sheet) */
+  #side-panel {
+    display: none !important;
+  }
+
+  /* Map takes full height minus top bar */
+  #map-container {
+    flex: 1;
+    min-height: 0;
+  }
+
+  #main {
+    flex-direction: column;
+    flex: 1;
+  }
+
+  /* Floating search bar overlay on map */
+  #ghost-mobile-search {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    z-index: 1500;
+    background: rgba(17,24,39,0.96);
+    border: 1px solid #2a3a56;
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+
+  .mobile-search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mobile-search-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .mobile-search-dot.start { background: #22c55e; }
+  .mobile-search-dot.end   { background: #ef4444; }
+
+  .mobile-search-input {
+    flex: 1;
+    background: rgba(26,34,54,0.9);
+    border: 1px solid #2a3a56;
+    border-radius: 8px;
+    color: #e8eaf0;
+    font-size: 15px;
+    padding: 9px 12px;
+    outline: none;
+    font-family: inherit;
+  }
+
+  .mobile-search-input::placeholder {
+    color: #4a5568;
+  }
+
+  .mobile-search-input:focus {
+    border-color: #22c55e;
+  }
+
+  .mobile-search-swap {
+    background: rgba(26,34,54,0.9);
+    border: 1px solid #2a3a56;
+    border-radius: 6px;
+    color: #8892a4;
+    padding: 5px 8px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  /* Camera count badge repositioned for mobile */
+  #camera-count-badge {
+    top: auto;
+    bottom: 90px;
+    right: 72px;
+  }
+
+  /* map-hint above bottom sheet */
+  #map-hint {
+    bottom: 90px;
+  }
+
+  /* Camera legend — hidden on mobile (too much clutter) */
+  #camera-legend {
+    display: none;
+  }
+
+  /* FAB cluster stays above bottom sheet */
+  #ghost-fab-cluster {
+    bottom: 92px;
+  }
+}
+
+/* ── Landscape orientation tweaks ─────────────────────────────── */
+@media (max-width: 768px) and (orientation: landscape) {
+  #ghost-bottom-sheet {
+    max-height: 50vh;
+  }
+
+  #ghost-bottom-sheet.sheet-peek {
+    transform: translateY(calc(100% - 60px));
+  }
+
+  .bottom-sheet-peek-row {
+    padding: 8px 16px 4px;
+  }
+
+  #ghost-fab-cluster {
+    bottom: 70px;
+  }
+
+  .ghost-fab-primary {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+
+  .ghost-fab-secondary {
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
+  }
+}
+
+/* ── ALPR proximity pulse on map markers ──────────────────────── */
+.alpr-nearby-pulse {
+  animation: marker-pulse 1s ease-in-out infinite;
+}
+
+@keyframes marker-pulse {
+  0%, 100% { filter: drop-shadow(0 0 4px #ef4444) brightness(1.2); }
+  50%       { filter: drop-shadow(0 0 12px #ef4444) brightness(1.8); }
+}
