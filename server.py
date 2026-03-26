@@ -49,6 +49,12 @@ GHOST_ADMIN_KEY = os.environ.get('GHOST_ADMIN_KEY') or secrets.token_hex(32)
 if not os.environ.get('GHOST_ADMIN_KEY'):
     print('[WARNING] GHOST_ADMIN_KEY not set — generated ephemeral key. Set env var for persistence.')
 
+# ─── iOS API Key ───────────────────────────────────────────────────────────────
+GHOST_API_KEY = os.environ.get('GHOST_API_KEY') or secrets.token_hex(16)
+if not os.environ.get('GHOST_API_KEY'):
+    print(f'[iOS API] GHOST_API_KEY not set — generated ephemeral key: {GHOST_API_KEY}')
+    print('[iOS API] Set env var GHOST_API_KEY to make it permanent.')
+
 # ─── Privacy/VPN/Tor Configuration ────────────────────────────────────────────
 PRIVACY_MODE_ENABLED = False  # User opt-in, not default
 TOR_SOCKS5_HOST = os.environ.get('TOR_SOCKS5_HOST', '127.0.0.1')
@@ -1219,7 +1225,7 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
     def _send_cors_headers(self):
         self.send_header('Access-Control-Allow-Origin', self._cors_origin())
         self.send_header('Access-Control-Allow-Methods', 'GET, POST')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-API-Key')
 
     def _send_json(self, data, status=200):
         body = json.dumps(data, indent=2).encode()
@@ -1272,6 +1278,14 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
         if _check_rate_limit(ip):
             return True
         self._send_json({'error': 'Rate limit exceeded. Max 60 requests/min.'}, 429)
+        return False
+
+    def _check_api_key(self):
+        """Check X-API-Key header. Returns True if valid, sends 401 and returns False otherwise."""
+        key = self.headers.get('X-API-Key', '')
+        if key == GHOST_API_KEY:
+            return True
+        self._send_json({'error': 'Unauthorized. Provide a valid X-API-Key header.'}, 401)
         return False
 
     def do_OPTIONS(self):
@@ -2007,6 +2021,198 @@ class GhostHandler(http.server.SimpleHTTPRequestHandler):
                 'surveillance_density': density,
                 'privacy_score':        privacy_score,
                 'cameras':              cam_list,
+            })
+            return
+
+        # ══════════════════════════════════════════════════════════════════════
+        # iOS Native App API (X-API-Key required)
+        # ══════════════════════════════════════════════════════════════════════
+
+        # ── GET /api/route — Ghost mode route calculation ─────────────────────
+        # Params: start_lat, start_lng, end_lat, end_lng
+        # Returns: {route:[{lat,lng}], score:float, camera_count:int, distance_km:float}
+        if self.path.startswith('/api/route') and not self.path.startswith('/api/route/score') and not self.path.startswith('/api/v1/route'):
+            if not self._check_api_key():
+                return
+            if not self._check_rate():
+                return
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+
+            def _qf(name):
+                vals = params.get(name)
+                if not vals:
+                    return None
+                try:
+                    return float(vals[0])
+                except (ValueError, TypeError):
+                    return None
+
+            start_lat = _qf('start_lat')
+            start_lng = _qf('start_lng')
+            end_lat   = _qf('end_lat')
+            end_lng   = _qf('end_lng')
+
+            if None in (start_lat, start_lng, end_lat, end_lng):
+                self._send_json({'error': 'Required params: start_lat, start_lng, end_lat, end_lng'}, 400)
+                return
+
+            if not (-90 <= start_lat <= 90 and -90 <= end_lat <= 90 and
+                    -180 <= start_lng <= 180 and -180 <= end_lng <= 180):
+                self._send_json({'error': 'lat/lng out of valid range'}, 400)
+                return
+
+            print(f'[iOS /api/route] {start_lat},{start_lng} → {end_lat},{end_lng}')
+            result, status = ghost_route_fn(start_lng, start_lat, end_lng, end_lat)
+
+            if 'error' in result:
+                self._send_json(result, status)
+                return
+
+            ghost = result.get('ghost_route', result.get('fastest_route', {}))
+            coords_raw = ghost.get('coords', [])
+            # coords are [[lat,lng], ...] — convert to [{lat,lng}]
+            route_points = [{'lat': c[0], 'lng': c[1]} for c in coords_raw]
+            dist_km = round(ghost.get('distance', 0) / 1000.0, 3)
+
+            self._send_json({
+                'route':        route_points,
+                'score':        float(result.get('score', 50)),
+                'camera_count': int(ghost.get('cameras', 0)),
+                'distance_km':  dist_km,
+            })
+            return
+
+        # ── GET /api/cameras — Camera overlay data for a bounding box ─────────
+        # Params: min_lat, min_lng, max_lat, max_lng
+        # Returns: {cameras:[{id,lat,lng,type,direction,operator}]}
+        if self.path.startswith('/api/cameras') and not self.path.startswith('/api/cameras/reported'):
+            if not self._check_api_key():
+                return
+            if not self._check_rate():
+                return
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+
+            def _qf(name):
+                vals = params.get(name)
+                if not vals:
+                    return None
+                try:
+                    return float(vals[0])
+                except (ValueError, TypeError):
+                    return None
+
+            min_lat = _qf('min_lat')
+            min_lng = _qf('min_lng')
+            max_lat = _qf('max_lat')
+            max_lng = _qf('max_lng')
+
+            if None in (min_lat, min_lng, max_lat, max_lng):
+                self._send_json({'error': 'Required params: min_lat, min_lng, max_lat, max_lng'}, 400)
+                return
+
+            # Clamp bbox size to ~1° (~111 km) to avoid overload
+            lat_span = max_lat - min_lat
+            lon_span = max_lng - min_lng
+            if lat_span > 1.5 or lon_span > 1.5:
+                self._send_json({'error': 'Bounding box too large (max ~1.5° per side)'}, 400)
+                return
+
+            print(f'[iOS /api/cameras] bbox {min_lat},{min_lng} → {max_lat},{max_lng}')
+            raw_cameras = fetch_cameras_cached(min_lat, min_lng, max_lat, max_lng)
+
+            # Also merge confirmed community-reported cameras
+            confirmed = fetch_confirmed_reported_cameras()
+            existing_ids = {c['id'] for c in raw_cameras}
+            for rc in confirmed:
+                if rc['id'] not in existing_ids:
+                    raw_cameras.append({
+                        'id':   rc['id'],
+                        'lat':  rc['lat'],
+                        'lon':  rc['lon'],
+                        'tags': {
+                            'man_made':          'surveillance',
+                            'operator':          rc.get('operator', 'Unknown'),
+                            'surveillance:type': rc.get('type', 'Unknown'),
+                        },
+                    })
+
+            cameras_out = []
+            for cam in raw_cameras:
+                tags = cam.get('tags', {})
+                cameras_out.append({
+                    'id':        cam['id'],
+                    'lat':       cam['lat'],
+                    'lng':       cam['lon'],
+                    'type':      tags.get('surveillance:type', tags.get('camera:type', 'Unknown')),
+                    'direction': tags.get('direction', tags.get('camera:direction', 'Unknown')),
+                    'operator':  tags.get('operator', tags.get('operator:short', 'Unknown')),
+                })
+
+            self._send_json({'cameras': cameras_out})
+            return
+
+        # ── GET /api/route/score — Score a given path ─────────────────────────
+        # Params: path (JSON array of {lat,lng} points)
+        # Returns: {score:float, camera_count:int, risk_level:"low"|"medium"|"high"}
+        if self.path.startswith('/api/route/score'):
+            if not self._check_api_key():
+                return
+            if not self._check_rate():
+                return
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+
+            path_raw = params.get('path', [None])[0]
+            if not path_raw:
+                self._send_json({'error': 'Required param: path (JSON array of {lat,lng})'}, 400)
+                return
+
+            try:
+                path_points = json.loads(path_raw)
+                if not isinstance(path_points, list) or len(path_points) < 2:
+                    raise ValueError('path must be an array with at least 2 points')
+                # Validate and normalize points
+                coords = []
+                for pt in path_points:
+                    lat = float(pt.get('lat') or pt.get('latitude') or 0)
+                    lng = float(pt.get('lng') or pt.get('lon') or pt.get('longitude') or 0)
+                    coords.append([lng, lat])  # [lon, lat] for internal use
+            except (json.JSONDecodeError, ValueError, TypeError, AttributeError) as e:
+                self._send_json({'error': f'Invalid path parameter: {e}'}, 400)
+                return
+
+            # Build a bbox from the path points with padding
+            lats = [c[1] for c in coords]
+            lons = [c[0] for c in coords]
+            pad = 0.01
+            cameras = fetch_cameras_cached(
+                min(lats) - pad, min(lons) - pad,
+                max(lats) + pad, max(lons) + pad,
+            )
+
+            # Count cameras within CAMERA_PROXIMITY_M of the route
+            camera_count = sum(
+                1 for cam in cameras
+                if min_dist_to_polyline(coords, cam['lat'], cam['lon']) <= CAMERA_PROXIMITY_M
+            )
+
+            # Score: 100 = no cameras, scales down, floor 0
+            score = max(0.0, min(100.0, 100.0 - camera_count * 10.0))
+
+            if camera_count == 0:
+                risk_level = 'low'
+            elif camera_count <= 3:
+                risk_level = 'medium'
+            else:
+                risk_level = 'high'
+
+            print(f'[iOS /api/route/score] {len(coords)} points, {camera_count} cameras, score={score}')
+            self._send_json({
+                'score':        round(score, 2),
+                'camera_count': camera_count,
+                'risk_level':   risk_level,
             })
             return
 
